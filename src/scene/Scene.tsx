@@ -191,9 +191,18 @@ export function Scene() {
   const quality = useUiStore((s) => s.quality);
   const ultra = quality === 'ultra';
   const fast = quality === 'fast';
+  // Stop rendering entirely while the tab is hidden (the 10 Hz engine keeps
+  // simulating, so the picture is current the moment the tab returns)
+  const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
+  useEffect(() => {
+    const on = () => setVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
   return (
     <Canvas
       shadows
+      frameloop={visible ? 'always' : 'never'}
       dpr={ultra ? Math.min(2, window.devicePixelRatio) : fast ? Math.min(1, dpr) : dpr}
       camera={{ position: [24, 14, 26], fov: 45, near: 0.1, far: 300 }}
       gl={{
@@ -207,6 +216,8 @@ export function Scene() {
       // a synchronous GPU round-trip per program on cold loads
       onCreated={({ gl }) => {
         gl.debug.checkShaderErrors = import.meta.env.DEV;
+        // Let the browser restore a lost context (GPU reset / driver hiccup) instead of dying
+        gl.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault(), false);
       }}
     >
       <PerformanceMonitor

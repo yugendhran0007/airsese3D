@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { OfficeThemeId } from '../config/officeThemes';
+import { recommendQuality } from '../utils/hardware';
 
 export type AppMode = 'live' | 'simulation' | 'sensor';
 export type CameraMode = 'orbit' | 'follow' | 'cinematic';
@@ -14,7 +15,8 @@ function loadQuality(): Quality {
     const q = localStorage.getItem(QUALITY_KEY);
     if (q === 'fast' || q === 'balanced' || q === 'ultra') return q;
   } catch { /* private mode */ }
-  return 'balanced';
+  // First visit: pick from the hardware (low-end → Fast straight away)
+  return recommendQuality();
 }
 
 /** Dismissable UI surfaces (🗙). Restored from the RestorePill or "Show all". */

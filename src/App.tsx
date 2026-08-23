@@ -3,6 +3,7 @@ import { startWeatherPolling } from './providers/weatherPoller';
 import { Scene } from './scene/Scene';
 import { connectEngine } from './state/simStore';
 import { AppShell } from './ui/AppShell';
+import { SceneErrorBoundary } from './ui/shell/SceneErrorBoundary';
 
 export default function App() {
   useEffect(() => {
@@ -12,7 +13,9 @@ export default function App() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-base">
-      <Scene />
+      <SceneErrorBoundary>
+        <Scene />
+      </SceneErrorBoundary>
       <AppShell />
     </div>
   );

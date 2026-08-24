@@ -110,3 +110,4 @@ node scripts/interact.mjs [outDir]                  # scripted interaction suite
 ```
 
 Both use `puppeteer-core` with the system Chrome and SwiftShader (no GPU needed).
+# Airsense

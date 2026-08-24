@@ -91,13 +91,25 @@ function GlassRoom({ area, realistic }: { area: AreaRect; realistic: boolean }) 
   const frontZ = cz + d / 2;
   const isConference = kind === 'conference';
 
+  // Architectural glass: the convincing part is the *reflection*, not
+  // transparency, so this leans on the HDR office environment map rather than
+  // `transmission` (which would force three into a whole extra render pass of
+  // the scene per pane — far too expensive here). ior 1.52 + a clearcoat give
+  // the bright grazing-angle sheen and edge highlight real glazing has.
   const glassMat = (
     <meshPhysicalMaterial
-      color={realistic ? '#dbe9f1' : '#bfe0f2'}
+      color={realistic ? '#cfe2ec' : '#bfe0f2'}
       transparent
-      opacity={realistic ? 0.12 : 0.16}
-      roughness={0.04}
-      metalness={0.05}
+      opacity={realistic ? 0.16 : 0.18}
+      roughness={0.015}
+      metalness={0}
+      ior={1.52}
+      reflectivity={0.62}
+      specularIntensity={1}
+      clearcoat={1}
+      clearcoatRoughness={0.02}
+      envMapIntensity={realistic ? 2.2 : 1}
+      side={THREE.DoubleSide}
     />
   );
   const frameMat = (

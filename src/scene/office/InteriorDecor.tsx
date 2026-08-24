@@ -5,7 +5,9 @@
  * and derived from room dimensions + the office layout, so it follows the
  * room-size sliders. Only mounted in realistic mode (see OfficeShell).
  */
-import { useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
+import * as THREE from 'three';
+import { useTexture } from '@react-three/drei';
 import { useSimStore } from '../../state/simStore';
 import { useUiStore } from '../../state/uiStore';
 import { OFFICE_THEMES } from '../../config/officeThemes';
@@ -26,6 +28,67 @@ function slatRun(
 ) {
   if (z1 - z0 < 0.6) return;
   for (let z = z0 + pitch / 2; z < z1; z += pitch) out.push({ p: [x, 1.4, z], ry });
+}
+
+/**
+ * Framed wall posters. The artwork is real image texture (cropped from the
+ * source photos into `public/textures/posters/`), so each frame is sized from
+ * its own aspect ratio — a poster is never stretched to fit a generic frame.
+ * Unlit-ish tone: a low-roughness standard material keeps the print readable
+ * under the dark themes without blowing out under the daylight rig.
+ */
+const POSTERS = {
+  imagine: { url: '/textures/posters/imagine.webp', aspect: 1228 / 672 },
+  failure: { url: '/textures/posters/failure.webp', aspect: 1 },
+  bharathi: { url: '/textures/posters/bharathi.webp', aspect: 1024 / 490 },
+} as const;
+type PosterId = keyof typeof POSTERS;
+
+interface PosterSpec {
+  id: PosterId;
+  /** Wall-face point; the frame is built facing +z and rotated by `ry`. */
+  p: [number, number, number];
+  ry: number;
+  /** Frame height in metres — width follows the artwork's aspect. */
+  h: number;
+}
+
+function Poster({ spec, frame, mat }: { spec: PosterSpec; frame: string; mat: string }) {
+  const { url, aspect } = POSTERS[spec.id];
+  const tex = useTexture(url);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  const h = spec.h;
+  const w = h * aspect;
+  return (
+    <group position={spec.p} rotation-y={spec.ry}>
+      {/* Frame */}
+      <mesh castShadow>
+        <boxGeometry args={[w + 0.07, h + 0.07, 0.035]} />
+        <meshStandardMaterial color={frame} roughness={0.45} metalness={0.35} />
+      </mesh>
+      {/* Mount board just inside the frame */}
+      <mesh position-z={0.019}>
+        <planeGeometry args={[w + 0.03, h + 0.03]} />
+        <meshStandardMaterial color={mat} roughness={0.9} />
+      </mesh>
+      {/* Print. A gentle self-emission (the artwork feeding its own emissive
+          map) keeps the colours vivid under the dark themes, the way a gallery
+          spot-lit print reads — without it a white-ground poster goes muddy
+          grey once the wall bounce drops away. */}
+      <mesh position-z={0.021}>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial
+          map={tex}
+          emissiveMap={tex}
+          emissive="#ffffff"
+          emissiveIntensity={0.35}
+          roughness={0.5}
+          metalness={0}
+        />
+      </mesh>
+    </group>
+  );
 }
 
 export function InteriorDecor() {
@@ -62,14 +125,20 @@ export function InteriorDecor() {
       if (b - a > 0.6) slatBacks.push({ p: [rx + 0.015, 1.4, (a + b) / 2], ry: 0, s: [1, 1, (b - a) / 1] });
     }
 
-    // Framed art: three canvases on the right wall slat run, one on the back wall by the door
-    const art: { p: [number, number, number]; ry: number; w: number; h: number; c: string }[] = [];
+    // Framed posters: spaced along the right wall run, plus one on the left wall
+    // between the feature wall and the entrance. Eye level is 1.65 m.
+    const art: PosterSpec[] = [];
+    const order: PosterId[] = ['imagine', 'failure', 'bharathi'];
     const [ra, rb] = segsR[0];
     if (rb - ra > 6) {
       for (let i = 0; i < 3; i++) {
         const z = ra + ((rb - ra) * (i + 1)) / 4;
-        art.push({ p: [rx - 0.05, 1.65, z], ry: -Math.PI / 2, w: 1.2, h: 0.8, c: theme.art[i % theme.art.length] });
+        art.push({ p: [rx - 0.05, 1.65, z], ry: -Math.PI / 2, id: order[i], h: order[i] === 'failure' ? 1.15 : 0.95 });
       }
+    }
+    const [la, lb] = segsL[1];
+    if (lb - la > 2.5) {
+      art.push({ p: [lx + 0.05, 1.65, (la + lb) / 2], ry: Math.PI / 2, id: 'bharathi', h: 0.8 });
     }
 
     // Floor planters: flank the entrance, the feature wall and the cafeteria edge
@@ -154,23 +223,12 @@ export function InteriorDecor() {
         <meshStandardMaterial color={theme.mat} roughness={1} />
       </mesh>
 
-      {/* Framed wall art */}
-      {art.map((a, i) => (
-        <group key={i} position={a.p} rotation-y={a.ry}>
-          <mesh>
-            <boxGeometry args={[a.w + 0.08, a.h + 0.08, 0.03]} />
-            <meshStandardMaterial color="#1a1c20" roughness={0.5} />
-          </mesh>
-          <mesh position-z={0.02}>
-            <planeGeometry args={[a.w, a.h]} />
-            <meshStandardMaterial color={a.c} roughness={0.8} />
-          </mesh>
-          <mesh position={[a.w * 0.18, -a.h * 0.12, 0.025]} rotation-z={0.4}>
-            <planeGeometry args={[a.w * 0.45, a.h * 0.3]} />
-            <meshStandardMaterial color="#f4f5f7" roughness={0.8} />
-          </mesh>
-        </group>
-      ))}
+      {/* Framed wall posters (real artwork textures) */}
+      <Suspense fallback={null}>
+        {art.map((a, i) => (
+          <Poster key={i} spec={a} frame={theme.frame} mat={theme.mount} />
+        ))}
+      </Suspense>
 
       {/* Floor planters: white pot + foliage */}
       {planters.map(([x, z], i) => (

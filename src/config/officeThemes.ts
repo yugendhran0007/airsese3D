@@ -5,7 +5,7 @@
  * stay the white IT-office baseline — themes change walls, feature panels,
  * accents, carpet, lounge seating and the art.
  */
-export type OfficeThemeId = 'navy-oak' | 'forest' | 'midnight' | 'sunset';
+export type OfficeThemeId = 'navy-oak' | 'forest' | 'midnight' | 'noir' | 'sunset';
 
 export interface OfficeTheme {
   id: OfficeThemeId;
@@ -33,8 +33,11 @@ export interface OfficeTheme {
   /** Desk privacy screens + pedestals. */
   deskScreen: string;
   pedestal: string;
-  /** Framed art palette. */
+  /** Framed art palette (legacy accent swatches, still used for small decor). */
   art: string[];
+  /** Poster frame and mount-board colours. */
+  frame: string;
+  mount: string;
   /** Warm accent light over the cafeteria. */
   accentLight: string;
   /** Planter pot colour. */
@@ -59,6 +62,8 @@ export const OFFICE_THEMES: Record<OfficeThemeId, OfficeTheme> = {
     deskScreen: '#aeb3ba',
     pedestal: '#e4dcc8',
     art: ['#2f6fb3', '#e0a23a', '#1f5f6b', '#c74b4b'],
+    frame: '#1a1c20',
+    mount: '#f7f5f0',
     accentLight: '#ffd9a8',
     pot: '#f4f5f7',
   },
@@ -79,6 +84,8 @@ export const OFFICE_THEMES: Record<OfficeThemeId, OfficeTheme> = {
     deskScreen: '#9aa89a',
     pedestal: '#d9cfb8',
     art: ['#2f6b4f', '#c9a449', '#8a5a3b', '#4c7a8f'],
+    frame: '#2a2f27',
+    mount: '#f4f2ea',
     accentLight: '#ffe6b8',
     pot: '#d9d3c4',
   },
@@ -99,8 +106,32 @@ export const OFFICE_THEMES: Record<OfficeThemeId, OfficeTheme> = {
     deskScreen: '#4a5058',
     pedestal: '#3b3f46',
     art: ['#38e1ff', '#ff6b3d', '#8b5cf6', '#2ee6a6'],
+    frame: '#0c0e11',
+    mount: '#15181d',
     accentLight: '#9fd8ff',
     pot: '#2a2e34',
+  },
+  noir: {
+    id: 'noir',
+    label: 'Noir Ember',
+    blurb: 'Dark gallery: near-black walls, deep teal panels, ember-orange accents, charcoal carpet',
+    wall: '#171b21',
+    carpet: '#2b2f36',
+    runner: '#123039',
+    mat: '#0b0e12',
+    feature: '#0d2a33',
+    cove: '#ff8a3d',
+    slat: '#141a1f',
+    slatBack: '#080a0d',
+    raft: '#1d2228',
+    lounge: '#0f4a56',
+    deskScreen: '#2f353d',
+    pedestal: '#262b32',
+    art: ['#2aa9b8', '#ff8a3d', '#f5c26b', '#1f6f7d'],
+    frame: '#0a0c0f',
+    mount: '#10141a',
+    accentLight: '#ffb066',
+    pot: '#1d2228',
   },
   sunset: {
     id: 'sunset',
@@ -119,6 +150,8 @@ export const OFFICE_THEMES: Record<OfficeThemeId, OfficeTheme> = {
     deskScreen: '#c8b9a8',
     pedestal: '#eadcc6',
     art: ['#b8452b', '#d69a2f', '#2f6b4f', '#3a5a8f'],
+    frame: '#4a2f25',
+    mount: '#faf4e8',
     accentLight: '#ffc98a',
     pot: '#e8d7c3',
   },

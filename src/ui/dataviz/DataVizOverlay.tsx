@@ -163,11 +163,13 @@ export function DataVizOverlay() {
 
   return (
     <section
-      className={clsx(
-        'glass pointer-events-auto absolute top-20 right-4 bottom-4 left-4 flex flex-col overflow-hidden fade-up',
-        digital && 'bg-[#030a0c]/95',
-      )}
-      style={digital ? { fontFamily: '"JetBrains Mono", Consolas, monospace' } : undefined}
+      className="glass pointer-events-auto absolute top-20 right-4 bottom-4 left-4 z-30 flex flex-col overflow-hidden fade-up"
+      style={{
+        // Near-opaque: this overlay is read like a page, so the scene behind it
+        // must not show through the numbers.
+        background: digital ? 'rgba(3, 10, 12, 0.97)' : 'rgba(11, 20, 36, 0.97)',
+        ...(digital ? { fontFamily: '"JetBrains Mono", Consolas, monospace' } : {}),
+      }}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-line px-5 py-2.5">

@@ -50,7 +50,7 @@ export function PresentationOverlay() {
     <div className="pointer-events-none absolute inset-0">
       {/* Letterbox bars */}
       <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/90 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/95 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/95 via-black/55 to-transparent" />
 
       {/* Top strip: brand, live numbers, scene counter, exit */}
       <div className="pointer-events-auto absolute top-4 right-6 left-6 flex items-center justify-between">
@@ -72,8 +72,14 @@ export function PresentationOverlay() {
         </div>
       </div>
 
-      {/* Caption card + navigation */}
-      <div key={scene.id} className="pointer-events-auto absolute bottom-8 left-1/2 w-[640px] max-w-[92vw] -translate-x-1/2 text-center fade-up">
+      {/* Caption card + navigation. The card carries its own scrim: the
+          letterbox gradient has already faded to transparent this far up, and
+          near-white caption text over the bright office floor was unreadable. */}
+      <div
+        key={scene.id}
+        className="pointer-events-auto absolute bottom-8 left-1/2 w-[640px] max-w-[92vw] -translate-x-1/2 rounded-2xl px-6 py-4 text-center fade-up"
+        style={{ background: 'rgba(6, 10, 18, 0.72)', backdropFilter: 'blur(6px)' }}
+      >
         <div className="flex items-center justify-center gap-4">
           <button type="button" onClick={() => stepPresentation(-1)} className="text-ink-faint hover:text-ink" aria-label="Previous scene" disabled={sceneIndex === 0}>
             <ChevronLeft size={22} />

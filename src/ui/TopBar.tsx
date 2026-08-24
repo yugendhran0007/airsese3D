@@ -61,7 +61,7 @@ export function TopBar() {
 
   if (navHidden) return null;
   return (
-    <header className="glass pointer-events-auto absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-2xl px-5 py-2.5">
+    <header className="glass scroll-thin pointer-events-auto absolute top-3 left-1/2 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 items-center gap-4 overflow-x-auto rounded-2xl px-5 py-2.5 [&>*]:shrink-0">
       {/* Brand = menu button */}
       <button
         type="button"

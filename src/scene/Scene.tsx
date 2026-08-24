@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { PerformanceMonitor } from '@react-three/drei';
@@ -27,6 +27,40 @@ import { WanderingNpcs } from './people/WanderingNpcs';
 import { NameTags } from './people/NameTags';
 import { RealisticEnvironment } from './RealisticEnvironment';
 import { Compiled } from './useAsyncCompile';
+
+/**
+ * The office is static geometry: only the player and the instanced crowd move,
+ * and the seated avatars cast no shadows outside ultra. Re-rendering the whole
+ * shadow map every frame therefore redraws ~140 casters for almost no change,
+ * so it is refreshed every Nth frame instead — and continuously during a warm-up
+ * window while GLTFs are still streaming in, and again whenever the room,
+ * render mode or quality changes.
+ */
+function ShadowScheduler() {
+  const gl = useThree((s) => s.gl);
+  const quality = useUiStore((s) => s.quality);
+  const renderMode = useUiStore((s) => s.renderMode);
+  const room = useSimStore((s) => s.params.room);
+  const frame = useRef(0);
+  const warmUntil = useRef(0);
+
+  useEffect(() => {
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = true;
+    warmUntil.current = performance.now() + 8000;
+    return () => {
+      gl.shadowMap.autoUpdate = true;
+    };
+  }, [gl, quality, renderMode, room]);
+
+  useFrame(() => {
+    const every = quality === 'ultra' ? 2 : 4;
+    if (performance.now() < warmUntil.current || frame.current++ % every === 0) {
+      gl.shadowMap.needsUpdate = true;
+    }
+  });
+  return null;
+}
 
 /** Frame-loop driver for scripted scenarios + ramp modes (runs inside Canvas). */
 function ScenarioDriver() {
@@ -237,6 +271,7 @@ export function Scene() {
         <OfficeWorld />
         <CameraRig />
         <ScenarioDriver />
+        <ShadowScheduler />
         {!fast && <Effects />}
       </Suspense>
     </Canvas>

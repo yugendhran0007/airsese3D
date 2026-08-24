@@ -8,7 +8,7 @@
  * Crowd (seats then standing spots) so tags match the rendered person and
  * the click-to-inspect identity. Per-frame bob is done in useFrame.
  */
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { STATUS_COLORS } from '../../config/constants';
@@ -79,12 +79,15 @@ function tagTexture(e: Employee, status: Status): THREE.CanvasTexture {
   return tex;
 }
 
-function Tag({ e, x, y, z, phase, seed }: { e: Employee; x: number; y: number; z: number; phase: number; seed: number }) {
+type TagTick = (t: number, camera: THREE.Camera) => void;
+
+function Tag({ e, x, y, z, phase, seed, register }: { e: Employee; x: number; y: number; z: number; phase: number; seed: number; register: (tick: TagTick) => () => void }) {
   const ref = useRef<THREE.Sprite>(null);
   const matRef = useRef<THREE.SpriteMaterial>(null);
   const shown = useRef<Status>('green');
   const tex = useMemo(() => tagTexture(e, 'green'), [e]);
-  useFrame(({ clock, camera }) => {
+  const tick = useCallback<TagTick>((clockTime, camera) => {
+    const clock = { elapsedTime: clockTime };
     const s = ref.current;
     if (!s) return;
     const ui = useUiStore.getState();
@@ -110,7 +113,9 @@ function Tag({ e, x, y, z, phase, seed }: { e: Employee; x: number; y: number; z
     const mat = s.material as THREE.SpriteMaterial;
     mat.opacity = selected ? 1 : THREE.MathUtils.clamp((34 - d) / 12, 0, 1);
     s.visible = mat.opacity > 0.02;
-  });
+  }, [e, y, seed, phase]);
+
+  useEffect(() => register(tick), [register, tick]);
   // Clicking the tag selects the employee (same as clicking the avatar)
   const onClick = (ev: ThreeEvent<MouseEvent>) => {
     ev.stopPropagation();
@@ -126,6 +131,11 @@ function Tag({ e, x, y, z, phase, seed }: { e: Employee; x: number; y: number; z
 
 export function NameTags({ layout }: { layout: OfficeLayout }) {
   const peoplePerZone = useSimStore((s) => s.params.peoplePerZone);
+  // Anonymous office is the default: with nothing to show, the sprites are not
+  // mounted at all (no draw calls, no scene-graph traversal, no ticks).
+  const employeeMode = useUiStore((s) => s.employeeMode);
+  const hasSelection = useUiStore((s) => s.selectedPerson !== null);
+  const visible = employeeMode || hasSelection;
 
   const tags = useMemo(() => {
     const out: { e: Employee; x: number; y: number; z: number; phase: number; seed: number }[] = [];
@@ -160,10 +170,25 @@ export function NameTags({ layout }: { layout: OfficeLayout }) {
     }
   }, []);
 
+  // One loop for every tag instead of one R3F subscriber per person
+  const ticks = useRef<TagTick[]>([]);
+  const register = useCallback((tick: TagTick) => {
+    ticks.current.push(tick);
+    return () => {
+      const i = ticks.current.indexOf(tick);
+      if (i >= 0) ticks.current.splice(i, 1);
+    };
+  }, []);
+  useFrame(({ clock, camera }) => {
+    const list = ticks.current;
+    for (let i = 0; i < list.length; i++) list[i](clock.elapsedTime, camera);
+  });
+
+  if (!visible) return null;
   return (
     <group>
       {tags.map((t) => (
-        <Tag key={t.e.id} {...t} />
+        <Tag key={t.e.id} {...t} register={register} />
       ))}
     </group>
   );

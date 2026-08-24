@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
@@ -47,19 +47,26 @@ interface SlotSpec {
   kind: SeatKind | 'stand';
 }
 
-/** One photorealistic employee: posed VALID avatar + status ring + ⚠ badge. */
+/** Per-person animation step, driven from the crowd's single useFrame. */
+type PersonTick = (t: number, dt: number, camera: THREE.Camera) => void;
+
+/** One photorealistic employee: posed VALID avatar + ⚠ badge. Registers its
+ *  animation step with the parent instead of subscribing its own useFrame —
+ *  ~56 R3F callbacks per frame collapse into one loop. */
 function RealPerson({
   slot,
   seed,
   zone,
   index,
   warnTex,
+  register,
 }: {
   slot: SlotSpec;
   seed: number;
   zone: ZoneId;
   index: number;
   warnTex: THREE.Texture;
+  register: (tick: PersonTick) => () => void;
 }) {
   const look = useMemo(() => appearanceFor(seed), [seed]);
   const quality = useUiStore((s) => s.quality);
@@ -122,20 +129,19 @@ function RealPerson({
     groupRef.current?.scale.setScalar(0.01);
   }, []);
 
-  useFrame((state, dt) => {
-    const t = state.clock.elapsedTime;
+  const tick = useCallback<PersonTick>((t, dt, camera) => {
     const status: Status = engine.snapshot.zones.find((z) => z.id === zone)?.status ?? 'green';
     const affected = isPersonAffected(seed, status);
 
     const group = groupRef.current;
-    if (group) {
+    if (group && group.scale.x < 1) {
       const s = Math.min(1, group.scale.x + dt * 2.5);
       group.scale.setScalar(s);
     }
 
     // LOD: far from the camera the pose is static (bones untouched → no extra work)
     tmpVec.set(px, 1, pz);
-    const far = state.camera.position.distanceTo(tmpVec) > ANIM_LOD_DIST;
+    const far = camera.position.distanceTo(tmpVec) > ANIM_LOD_DIST;
     if (far && !affected) return;
 
     // Breathing + affected slump (forward lean = negative world-X rotation)
@@ -158,7 +164,9 @@ function RealPerson({
           (slot.seated ? 1.55 : 2.05) + Math.sin(t * 2.4 + phase) * 0.05;
       }
     }
-  });
+  }, [zone, seed, px, pz, phase, slot.seated, spineRot, headRot, lHand, rHand]);
+
+  useEffect(() => register(tick), [register, tick]);
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -261,6 +269,23 @@ export function RealisticCrowd({ layout }: { layout: OfficeLayout }) {
     }
   }
 
+  // One frame loop for the whole crowd: each avatar registers a tick, the
+  // parent runs them in a plain array loop. R3F's per-subscriber overhead
+  // (and ~56 closure invocations through the renderer) disappears.
+  const ticks = useRef<PersonTick[]>([]);
+  const register = useCallback((tick: PersonTick) => {
+    ticks.current.push(tick);
+    return () => {
+      const i = ticks.current.indexOf(tick);
+      if (i >= 0) ticks.current.splice(i, 1);
+    };
+  }, []);
+  useFrame((state, dt) => {
+    const t = state.clock.elapsedTime;
+    const list = ticks.current;
+    for (let i = 0; i < list.length; i++) list[i](t, dt, state.camera);
+  });
+
   return (
     <group>
       <SafetyRings key={people.length} people={people} />
@@ -272,6 +297,7 @@ export function RealisticCrowd({ layout }: { layout: OfficeLayout }) {
           zone={p.zone}
           index={p.index}
           warnTex={warnTex}
+          register={register}
         />
       ))}
     </group>

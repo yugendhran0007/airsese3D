@@ -55,7 +55,7 @@ export const SIM_CLOCK_START_H = 9;
 export const MAX_PEOPLE = 100;
 
 export const DEFAULT_PARAMS: SimParams = {
-  room: { width: 30, length: 20, height: 3 },
+  room: { width: 30, length: 20, height: 3.6 },
   peoplePerZone: { A: 6, B: 6, C: 7, D: 6 },
   ventilation: 70,
   freshAir: 60,

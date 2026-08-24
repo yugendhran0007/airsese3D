@@ -4,10 +4,14 @@ interface NumberInputProps {
   min: number;
   max: number;
   unit?: string;
+  /** Increment; a fractional step also switches the display to one decimal
+   *  (the room height is 3.6 m, which must not render as "4"). */
+  step?: number;
   onChange: (v: number) => void;
 }
 
-export function NumberInput({ label, value, min, max, unit = '', onChange }: NumberInputProps) {
+export function NumberInput({ label, value, min, max, unit = '', step = 1, onChange }: NumberInputProps) {
+  const shown = step < 1 ? Number(value.toFixed(1)) : Math.round(value);
   return (
     <label className="block">
       <div className="mb-1 text-[11px] font-semibold tracking-wider text-ink-dim uppercase">{label}</div>
@@ -16,7 +20,8 @@ export function NumberInput({ label, value, min, max, unit = '', onChange }: Num
           type="number"
           min={min}
           max={max}
-          value={Math.round(value)}
+          step={step}
+          value={shown}
           onChange={(e) => {
             const v = Number(e.target.value);
             if (!Number.isNaN(v)) onChange(Math.max(min, Math.min(max, v)));

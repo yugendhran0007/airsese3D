@@ -122,7 +122,8 @@ export function ControlDrawer() {
             label="Height"
             value={params.room.height}
             min={2}
-            max={6}
+            max={12}
+            step={0.1}
             unit="m"
             onChange={(v) => setParams({ room: { ...params.room, height: v } })}
           />

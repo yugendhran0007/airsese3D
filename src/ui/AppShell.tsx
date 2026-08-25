@@ -17,6 +17,7 @@ import { LoadingScreen } from './shell/LoadingScreen';
 import { MiniMap } from './shell/MiniMap';
 import { Onboarding } from './shell/Onboarding';
 import { Shortcuts } from './shell/Shortcuts';
+import { ActionBar } from './shell/ActionBar';
 import { Closable, RestorePill } from './shell/CloseX';
 
 // Heavy, rarely-open panels load on demand (Recharts is ~400 kB)
@@ -56,6 +57,7 @@ export function AppShell() {
             <DataVizOverlay />
           </Suspense>
           <Closable id="minimap" bare><MiniMap /></Closable>
+          <ActionBar />
           <RestorePill />
           <Shortcuts />
           <Onboarding />

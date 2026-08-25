@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { MAX_PEOPLE, STATUS_COLORS } from '../../config/constants';
+import { playerOccupies } from '../character/seatPicking';
 import { engine } from '../../simulation/engine';
 import { isPersonAffected, personStatus } from '../../simulation/effects';
 import { ZONE_IDS } from '../../simulation/zones';
@@ -134,6 +135,8 @@ export function Crowd({ layout, skipFirst = 0 }: { layout: OfficeLayout; skipFir
 
       for (let i = skipFirst; i < count; i++) {
         const slot = zoneSlots[i];
+        // The player's own chair stays empty
+        if (slot.seated && playerOccupies(slot.x, slot.z)) continue;
         const seed = i * 17 + zoneId.charCodeAt(0) * 101;
         const phase = seededRandom(seed) * Math.PI * 2;
         const affected = isPersonAffected(seed, status);

@@ -11,10 +11,22 @@ import { RealisticBody } from './RealisticBody';
 import { Compiled } from '../useAsyncCompile';
 import type { OfficeLayout } from '../office/officeLayout';
 
-/** Procedural capsule body: stylized mode, and the loading fallback in realistic mode. */
+/**
+ * Procedural capsule body: stylized mode, and the loading fallback in realistic
+ * mode. It has no skeleton, so sitting is expressed by dropping the whole body
+ * onto the cushion rather than by posing limbs.
+ */
 function StylizedBody() {
+  const ref = useRef<THREE.Group>(null);
+  const seated = useCharacterStore((s) => s.activity === 'sitting');
+  useFrame((_, dt) => {
+    const g = ref.current;
+    if (!g) return;
+    const targetY = seated ? -0.42 : 0;
+    g.position.y += (targetY - g.position.y) * Math.min(1, dt * 8);
+  });
   return (
-    <>
+    <group ref={ref}>
       {/* Legs */}
       <mesh position={[-0.09, 0.28, 0]} castShadow>
         <capsuleGeometry args={[0.065, 0.4, 4, 8]} />
@@ -34,7 +46,7 @@ function StylizedBody() {
         <sphereGeometry args={[0.135, 14, 12]} />
         <meshStandardMaterial color="#e8b48f" roughness={0.7} />
       </mesh>
-    </>
+    </group>
   );
 }
 

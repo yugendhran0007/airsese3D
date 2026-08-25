@@ -7,9 +7,11 @@ import { STATUS_COLORS } from '../../config/constants';
 import { engine } from '../../simulation/engine';
 import { isPersonAffected, personStatus } from '../../simulation/effects';
 import { ZONE_IDS } from '../../simulation/zones';
+import { useCharacterStore } from '../../state/characterStore';
 import { useSimStore } from '../../state/simStore';
 import { useUiStore } from '../../state/uiStore';
 import type { Status, ZoneId } from '../../types/environment';
+import { playerOccupies } from '../character/seatPicking';
 import { seededRandom } from '../../utils/math';
 import type { OfficeLayout, SeatKind } from '../office/officeLayout';
 import { appearanceFor } from './crowdAppearance';
@@ -243,6 +245,8 @@ function SafetyRings({ people }: { people: { slot: SlotSpec; seed: number; zone:
  */
 export function RealisticCrowd({ layout }: { layout: OfficeLayout }) {
   const peoplePerZone = useSimStore((s) => s.params.peoplePerZone);
+  // Re-render when the player takes or leaves a chair so their slot is skipped
+  useCharacterStore((s) => s.activity);
   const perZone = realisticPerZone(useUiStore((s) => s.quality));
   const warnTex = useMemo(makeWarnTexture, []);
 
@@ -262,10 +266,13 @@ export function RealisticCrowd({ layout }: { layout: OfficeLayout }) {
     const zoneSlots = slots[zoneId];
     const count = Math.min(peoplePerZone[zoneId], zoneSlots.length, perZone);
     for (let i = 0; i < count; i++) {
+      const slot = zoneSlots[i];
+      // The player's own chair stays empty (occupancy can rise while seated)
+      if (slot.seated && playerOccupies(slot.x, slot.z)) continue;
       // Same seed formula as the stylized Crowd so identity, gender, and
       // affected-state stay consistent across render modes and the inspector.
       const seed = i * 17 + zoneId.charCodeAt(0) * 101;
-      people.push({ slot: zoneSlots[i], seed, zone: zoneId, index: i });
+      people.push({ slot, seed, zone: zoneId, index: i });
     }
   }
 

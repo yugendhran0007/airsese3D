@@ -11,6 +11,7 @@ import { AirflowParticles } from './airflow/AirflowParticles';
 import { CameraRig } from './CameraRig';
 import { ClickMarker } from './character/ClickMarker';
 import { PlayerCharacter } from './character/PlayerCharacter';
+import { SeatTargets } from './character/SeatTargets';
 import { Effects } from './Effects';
 import { Lighting } from './Lighting';
 import { ConferenceRoom } from './office/ConferenceRoom';
@@ -208,6 +209,7 @@ function OfficeWorld() {
       )}
       <NameTags layout={layout} />
       <PlayerCharacter layout={layout} />
+      <SeatTargets layout={layout} />
       <ClickMarker />
       <FloorClickTarget />
       <AirflowParticles />

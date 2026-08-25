@@ -10,6 +10,10 @@ import { useUiStore } from '../../state/uiStore';
 const BINDINGS: [string, string][] = [
   ['W A S D / ↑ ← ↓ →', 'Walk (camera-relative)'],
   ['Click floor', 'Walk to a point'],
+  ['Click a glowing chair', 'Walk over and sit down at the laptop'],
+  ['F', 'Sit at the nearest free desk / stand up'],
+  ['G', 'Dance'],
+  ['J', 'Jump'],
   ['Q / Shift', 'Zoom chase camera in / out'],
   ['Mouse drag', 'Orbit around you — front, back, side'],
   ['Esc', 'Back to orbit camera / close panels'],

@@ -20,7 +20,7 @@ function loadQuality(): Quality {
 }
 
 /** Dismissable UI surfaces (🗙). Restored from the RestorePill or "Show all". */
-export type CardId = 'navbar' | 'controls' | 'live' | 'outdoor' | 'comparison' | 'zones' | 'alerts' | 'scenarios' | 'hud' | 'minimap';
+export type CardId = 'navbar' | 'controls' | 'live' | 'outdoor' | 'comparison' | 'zones' | 'alerts' | 'scenarios' | 'hud' | 'minimap' | 'actions';
 export const CARD_LABELS: Record<CardId, string> = {
   navbar: 'Navbar',
   controls: 'Controls',
@@ -32,6 +32,7 @@ export const CARD_LABELS: Record<CardId, string> = {
   scenarios: 'Scenarios',
   hud: 'HUD',
   minimap: 'Map',
+  actions: 'Actions',
 };
 
 export interface SelectedPerson {

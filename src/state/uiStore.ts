@@ -91,7 +91,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   mode: 'live',
   cameraMode: 'orbit',
   renderMode: 'realistic',
-  officeTheme: 'navy-oak',
+  officeTheme: 'noir',
   rampMode: null,
   controlsOpen: true,
   dashboardOpen: true,

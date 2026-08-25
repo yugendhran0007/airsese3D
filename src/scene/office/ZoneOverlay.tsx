@@ -75,15 +75,22 @@ export function ZoneOverlay() {
               position={[0, 0.35, 0]}
               center
               distanceFactor={26}
-              style={{ pointerEvents: 'none', userSelect: 'none' }}
+              // Keep scene labels UNDER the DOM panels (glass sits at z 20–40;
+              // drei's default range is in the millions and paints over them)
+              zIndexRange={[10, 0]}
+              style={{ userSelect: 'none' }}
             >
               <div
+                onClick={() => useUiStore.getState().setSelectedZone(id)}
+                title={`Zone ${id} — click for people & air quality`}
                 style={{
                   fontFamily: 'Inter, sans-serif',
                   textAlign: 'center',
                   color: 'rgba(220,235,255,0.9)',
                   textShadow: '0 1px 6px rgba(0,0,0,0.8)',
                   whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  pointerEvents: 'auto',
                 }}
               >
                 <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 2 }}>ZONE {id}</div>

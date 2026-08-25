@@ -41,6 +41,10 @@ const POSTERS = {
   imagine: { url: '/textures/posters/imagine.webp', aspect: 1228 / 672 },
   failure: { url: '/textures/posters/failure.webp', aspect: 1 },
   bharathi: { url: '/textures/posters/bharathi.webp', aspect: 1024 / 490 },
+  /** User-supplied dark gallery wall: four blue-glow motivation prints as one wide mural. */
+  innovation: { url: '/textures/posters/innovation-wall.webp', aspect: 1400 / 933 },
+  nevergiveup: { url: '/textures/posters/nevergiveup.webp', aspect: 736 / 1308 },
+  ship: { url: '/textures/posters/ship.webp', aspect: 600 / 1200 },
 } as const;
 type PosterId = keyof typeof POSTERS;
 
@@ -91,6 +95,31 @@ function Poster({ spec, frame, mat }: { spec: PosterSpec; frame: string; mat: st
   );
 }
 
+/**
+ * Stacked-timber cladding behind the wall slats — the user's wood-block
+ * reference texture. One material for every instance; the mild per-run stretch
+ * of the pattern is invisible behind the slats. A near-white tint keeps the
+ * texture's own colour; dark themes pass their slatBack tone to deepen it.
+ */
+function WoodBacking({ parts, tint }: { parts: Part[]; tint: string }) {
+  const tex = useTexture('/textures/woodwall.webp');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  const bright = useMemo(() => {
+    // Lighten the theme tone so the map keeps its timber colour under it
+    const c = new THREE.Color(tint);
+    c.lerp(new THREE.Color('#ffffff'), 0.75);
+    return c;
+  }, [tint]);
+  return (
+    <Instanced parts={parts} shadow={false}>
+      <boxGeometry args={[0.01, 2.7, 1]} />
+      <meshStandardMaterial map={tex} color={bright} roughness={0.85} />
+    </Instanced>
+  );
+}
+
 export function InteriorDecor() {
   const room = useSimStore((s) => s.params.room);
   const theme = OFFICE_THEMES[useUiStore((s) => s.officeTheme)];
@@ -128,18 +157,23 @@ export function InteriorDecor() {
     // Framed posters: spaced along the right wall run, plus one on the left wall
     // between the feature wall and the entrance. Eye level is 1.65 m.
     const art: PosterSpec[] = [];
-    const order: PosterId[] = ['imagine', 'failure', 'bharathi'];
+    const order: PosterId[] = ['imagine', 'nevergiveup', 'failure', 'bharathi'];
     const [ra, rb] = segsR[0];
     if (rb - ra > 6) {
-      for (let i = 0; i < 3; i++) {
-        const z = ra + ((rb - ra) * (i + 1)) / 4;
-        art.push({ p: [rx - 0.05, 1.65, z], ry: -Math.PI / 2, id: order[i], h: order[i] === 'failure' ? 1.15 : 0.95 });
+      for (let i = 0; i < order.length; i++) {
+        const z = ra + ((rb - ra) * (i + 1)) / (order.length + 1);
+        const id = order[i];
+        art.push({ p: [rx - 0.05, 1.65, z], ry: -Math.PI / 2, id, h: id === 'failure' ? 1.15 : id === 'nevergiveup' ? 1.3 : 0.95 });
       }
     }
     const [la, lb] = segsL[1];
     if (lb - la > 2.5) {
-      art.push({ p: [lx + 0.05, 1.65, (la + lb) / 2], ry: Math.PI / 2, id: 'bharathi', h: 0.8 });
+      art.push({ p: [lx + 0.05, 1.65, (la + lb) / 2 - 0.9], ry: Math.PI / 2, id: 'bharathi', h: 0.8 });
+      art.push({ p: [lx + 0.05, 1.6, (la + lb) / 2 + 1.2], ry: Math.PI / 2, id: 'ship', h: 1.35 });
     }
+    // The user's dark gallery mural spans the front wall left of the entrance,
+    // facing the open plan (the cafeteria TV panel keeps the right half)
+    art.push({ p: [-W / 4 - 0.4, 1.7, L / 2 - WALL_FACE - 0.05], ry: Math.PI, id: 'innovation', h: 1.7 });
 
     // Floor planters: flank the entrance, the feature wall and the cafeteria edge
     const planters: [number, number][] = [
@@ -192,11 +226,17 @@ export function InteriorDecor() {
         </group>
       )}
 
-      {/* Oak slat panels with a dark backing board */}
-      <Instanced parts={slatBacks} shadow={false}>
-        <boxGeometry args={[0.01, 2.7, 1]} />
-        <meshStandardMaterial color={theme.slatBack} roughness={0.9} />
-      </Instanced>
+      {/* Oak slat panels over a stacked-timber backing (user's wood-wall texture) */}
+      <Suspense
+        fallback={
+          <Instanced parts={slatBacks} shadow={false}>
+            <boxGeometry args={[0.01, 2.7, 1]} />
+            <meshStandardMaterial color={theme.slatBack} roughness={0.9} />
+          </Instanced>
+        }
+      >
+        <WoodBacking parts={slatBacks} tint={theme.slatBack} />
+      </Suspense>
       <Instanced parts={slats} shadow={false}>
         <boxGeometry args={[0.035, 2.7, 0.04]} />
         <meshStandardMaterial color={theme.slat} roughness={0.65} />

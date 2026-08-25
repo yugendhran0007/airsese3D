@@ -10,6 +10,7 @@ import { ScenarioBar } from './controls/ScenarioBar';
 import { ThresholdsPanel } from './controls/ThresholdsPanel';
 import { CharacterHUD } from './hud/CharacterHUD';
 import { PersonInspector } from './hud/PersonInspector';
+import { ZoneQuickCard } from './hud/ZoneQuickCard';
 import { HumanInsightPanel } from './human/HumanInsightPanel';
 import { PresentationOverlay } from './presentation/PresentationOverlay';
 import { TopBar } from './TopBar';
@@ -47,6 +48,7 @@ export function AppShell() {
           <Closable id="alerts" bare><AlertsPanel /></Closable>
           <Closable id="hud" bare><CharacterHUD /></Closable>
           <PersonInspector />
+          <ZoneQuickCard />
           <Closable id="scenarios" bare><ScenarioBar /></Closable>
           <Suspense fallback={null}>
             <ChartsDrawer />

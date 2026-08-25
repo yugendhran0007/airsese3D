@@ -13,7 +13,7 @@ import {
   prepareAvatarSource,
   WorldXRotator,
 } from '../people/realisticPeople';
-import { applyDancePose, captureRest, restoreRest } from './emotes';
+import { applyDancePose, applyLaptopPose, captureRest, restoreRest, withNeutralAncestors } from './emotes';
 
 const SOLDIER_URL = '/models/Soldier.glb';
 
@@ -85,16 +85,21 @@ export function RealisticBody() {
       clone.updateMatrixWorld(true);
       const hipY = bones.hips?.getWorldPosition(new THREE.Vector3()).y ?? 0;
       clone.position.y = (kind === 'cafe' ? 0.52 : 0.56) - hipY;
-      applyPose(bones, kind, 0.5);
-      typing.current =
-        kind === 'cafe'
-          ? null
-          : {
-              spine: new WorldXRotator(bones.spine),
-              head: new WorldXRotator(bones.head),
-              lHand: new WorldXRotator(bones.lForeArm),
-              rHand: new WorldXRotator(bones.rForeArm),
-            };
+      // World-axis pose math needs the avatar's axes == world axes, but this
+      // clone is already mounted under the heading-rotated player group
+      withNeutralAncestors(clone, () => {
+        if (kind === 'cafe') applyPose(bones, kind, 0.5);
+        else applyLaptopPose(bones);
+        typing.current =
+          kind === 'cafe'
+            ? null
+            : {
+                spine: new WorldXRotator(bones.spine),
+                head: new WorldXRotator(bones.head),
+                lHand: new WorldXRotator(bones.lForeArm),
+                rHand: new WorldXRotator(bones.rForeArm),
+              };
+      });
     } else {
       typing.current = null;
       clone.position.y = 0;
@@ -105,9 +110,13 @@ export function RealisticBody() {
     const t = state.clock.elapsedTime;
 
     if (activity === 'dancing') {
-      // rotateBoneWorld composes onto the current rotation, so rebuild from rest each frame
-      restoreRest(rest);
-      applyDancePose(bones, t);
+      // rotateBoneWorld composes onto the current rotation, so rebuild from
+      // rest each frame — with ancestors neutralized so the moves stay in the
+      // avatar's own frame whichever way it faces
+      withNeutralAncestors(clone, () => {
+        restoreRest(rest);
+        applyDancePose(bones, t);
+      });
       return;
     }
 

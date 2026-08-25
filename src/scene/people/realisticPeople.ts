@@ -265,6 +265,8 @@ export interface PoseBones {
   rArm: THREE.Object3D | null;
   lForeArm: THREE.Object3D | null;
   rForeArm: THREE.Object3D | null;
+  lHand: THREE.Object3D | null;
+  rHand: THREE.Object3D | null;
   lUpLeg: THREE.Object3D | null;
   rUpLeg: THREE.Object3D | null;
   lLeg: THREE.Object3D | null;
@@ -285,6 +287,8 @@ export function findPoseBones(root: THREE.Object3D): PoseBones {
     rArm: g('RightArm'),
     lForeArm: g('LeftForeArm'),
     rForeArm: g('RightForeArm'),
+    lHand: g('LeftHand'),
+    rHand: g('RightHand'),
     lUpLeg: g('LeftUpLeg'),
     rUpLeg: g('RightUpLeg'),
     lLeg: g('LeftLeg'),

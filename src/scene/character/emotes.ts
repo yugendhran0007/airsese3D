@@ -47,7 +47,7 @@ export function restoreRest(rest: RestPose): void {
 }
 
 /** Live-tunable numbers of the laptop pose (exposed as window.__laptopTuning in dev). */
-export const LAPTOP_TUNING = { aX: 0.5, fX: 1.3, hX: -0.5, lTwist: 0.9, rTwist: -0.9 };
+export const LAPTOP_TUNING = { aX: 0.6, fX: 1.45, hX: -0.55, lTwist: 0.9, rTwist: -0.9 };
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__laptopTuning = LAPTOP_TUNING;
 }
@@ -80,8 +80,8 @@ export function applyLaptopPose(bones: PoseBones): void {
   rotateBoneWorld(bones.rFoot, AXIS_X, FWD * 0.1);
   // Upper arms: drop almost fully from the T-pose so the elbows rest at the
   // ribs (no flare), then a small forward swing toward the desk
-  rotateBoneWorld(bones.lArm, AXIS_Z, -1.42);
-  rotateBoneWorld(bones.rArm, AXIS_Z, 1.42);
+  rotateBoneWorld(bones.lArm, AXIS_Z, -1.48);
+  rotateBoneWorld(bones.rArm, AXIS_Z, 1.48);
   rotateBoneWorld(bones.lArm, AXIS_X, FWD * LAPTOP_TUNING.aX);
   rotateBoneWorld(bones.rArm, AXIS_X, FWD * LAPTOP_TUNING.aX);
   // Forearms: sloped down to the keys, angled inward to meet the keyboard centre
@@ -100,10 +100,15 @@ export function applyLaptopPose(bones: PoseBones): void {
   rotateBoneWorld(bones.rHand, AXIS_X, FWD * LAPTOP_TUNING.hX);
   rotateBoneWorld(bones.lHand, AXIS_Y, 0.12);
   rotateBoneWorld(bones.rHand, AXIS_Y, -0.12);
-  // Straight, engaged back with a slight forward lean; eyes on the screen
-  rotateBoneWorld(bones.spine, AXIS_X, FWD * 0.12);
-  rotateBoneWorld(bones.spine2, AXIS_X, FWD * 0.05);
-  rotateBoneWorld(bones.head, AXIS_X, FWD * 0.28);
+  // Straight, engaged back with a slight forward lean. The head drops until
+  // the gaze lands on the laptop screen straight ahead (screen centre ~0.5 m
+  // below eye level, 0.55 m out → ~42° down), square-on with no side turn.
+  // NOTE −FWD here: measured in-app, the head/neck/spine chain tips the face
+  // BACK under a FWD-signed world-X rotation on this rig — the opposite of the
+  // limbs. Sign fixed empirically (screenshot-verified), do not "tidy" it.
+  rotateBoneWorld(bones.spine, AXIS_X, -FWD * 0.06);
+  rotateBoneWorld(bones.neck, AXIS_X, -FWD * 0.2);
+  rotateBoneWorld(bones.head, AXIS_X, -FWD * 0.45);
 }
 
 /**

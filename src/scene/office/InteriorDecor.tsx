@@ -5,9 +5,9 @@
  * and derived from room dimensions + the office layout, so it follows the
  * room-size sliders. Only mounted in realistic mode (see OfficeShell).
  */
-import { Suspense, useMemo } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
-import { useTexture } from '@react-three/drei';
+import { useGLTF, useTexture } from '@react-three/drei';
 import { useSimStore } from '../../state/simStore';
 import { useUiStore } from '../../state/uiStore';
 import { OFFICE_THEMES } from '../../config/officeThemes';
@@ -120,12 +120,54 @@ function WoodBacking({ parts, tint }: { parts: Part[]; tint: string }) {
   );
 }
 
+/**
+ * Drop-in real floor plant (user's CGTrader "decorative indoor tree"):
+ * place the downloaded model at public/models/plant/plant.glb and every floor
+ * planter renders it instead of the procedural pot. CGTrader downloads are
+ * login-gated, so the file must be added manually — the HEAD-probe keeps the
+ * procedural planters as the default (same pattern as CustomOffice).
+ */
+function usePlantUrl(): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch('/models/plant/plant.glb', { method: 'HEAD' })
+      .then((r) => {
+        const type = r.headers.get('content-type') ?? '';
+        // Vite's dev server answers missing files with index.html — require a binary type
+        if (alive && r.ok && !type.includes('text/html')) setUrl('/models/plant/plant.glb');
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return url;
+}
+
+function RealPlant({ url, positions }: { url: string; positions: [number, number][] }) {
+  const { scene } = useGLTF(url);
+  const { instances, scale } = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(scene);
+    const h = Math.max(0.01, box.max.y - box.min.y);
+    return { instances: positions, scale: 1.55 / h }; // normalise to a 1.55 m tree
+  }, [scene, positions]);
+  return (
+    <>
+      {instances.map(([x, z], i) => (
+        <primitive key={i} object={i === 0 ? scene : scene.clone(true)} position={[x, 0, z]} scale={scale} />
+      ))}
+    </>
+  );
+}
+
 export function InteriorDecor() {
   const room = useSimStore((s) => s.params.room);
   const theme = OFFICE_THEMES[useUiStore((s) => s.officeTheme)];
   const layout = useOfficeLayout();
   const { width: W, length: L, height: H } = room;
 
+  const plantUrl = usePlantUrl();
   const cafe = layout.areas.find((a) => a.kind === 'cafeteria');
   const meetings = layout.areas.filter((a) => a.kind === 'meeting');
   const backDepth = Math.max(layout.conference.d, ...meetings.map((m) => m.d)) + 0.6;
@@ -270,8 +312,13 @@ export function InteriorDecor() {
         ))}
       </Suspense>
 
-      {/* Floor planters: white pot + foliage */}
-      {planters.map(([x, z], i) => (
+      {/* Floor planters: the drop-in CGTrader tree when present, else white pot + foliage */}
+      {plantUrl && (
+        <Suspense fallback={null}>
+          <RealPlant url={plantUrl} positions={planters} />
+        </Suspense>
+      )}
+      {!plantUrl && planters.map(([x, z], i) => (
         <group key={i} position={[x, 0, z]}>
           <mesh position-y={0.3} castShadow>
             <cylinderGeometry args={[0.26, 0.22, 0.6, 20]} />

@@ -33,12 +33,16 @@ const tmpVec = new THREE.Vector3();
 /** Beyond this camera distance seated avatars freeze their micro-animation (LOD). */
 const ANIM_LOD_DIST = 22;
 
-/** Skinned avatars are expensive — beyond this many per zone, the instanced
- * stylized crowd renders the overflow. Covers every seat at default rooms. */
-export const REALISTIC_PER_ZONE = 24;
-/** Fast mode keeps only a handful of skinned avatars per zone (each is a skinned draw call). */
-export function realisticPerZone(quality: 'fast' | 'balanced' | 'ultra'): number {
-  return quality === 'fast' ? 4 : quality === 'balanced' ? 12 : REALISTIC_PER_ZONE;
+/** Upper bound of skinned avatars per zone (slots cap the real count anyway). */
+export const REALISTIC_PER_ZONE = Number.POSITIVE_INFINITY;
+/**
+ * Every occupant is a real VALID human in realistic mode — the user's explicit
+ * choice over capsule overflow. Tiers still differ in asset weight (Fast and
+ * Balanced stream the lite 512² 40 %-tri GLBs via `tierUrl`), animation LOD
+ * and shadows, just not in who gets a real body.
+ */
+export function realisticPerZone(_quality: 'fast' | 'balanced' | 'ultra'): number {
+  return REALISTIC_PER_ZONE;
 }
 
 interface SlotSpec {

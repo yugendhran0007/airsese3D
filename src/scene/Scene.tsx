@@ -23,7 +23,7 @@ import { OfficeShell } from './office/OfficeShell';
 import { ZoneOverlay } from './office/ZoneOverlay';
 import { WallTvs } from './office/WallTvs';
 import { Crowd } from './people/Crowd';
-import { RealisticCrowd, realisticPerZone } from './people/RealisticCrowd';
+import { RealisticCrowd } from './people/RealisticCrowd';
 import { WanderingNpcs } from './people/WanderingNpcs';
 import { NameTags } from './people/NameTags';
 import { RealisticEnvironment } from './RealisticEnvironment';
@@ -153,7 +153,6 @@ function FloorClickTarget() {
 function OfficeWorld() {
   const layout = useOfficeLayout();
   const realistic = useUiStore((s) => s.renderMode === 'realistic');
-  const quality = useUiStore((s) => s.quality);
   // A downloaded model in public/models/office/ (e.g. Sketchfab "Office
   // Studio", CC-BY) replaces the built-in building shell when present.
   const customOfficeUrl = useCustomOfficeUrl();
@@ -193,8 +192,8 @@ function OfficeWorld() {
           {/* Photorealistic avatars for every employee; instanced crowd only
               renders overflow past the per-zone avatar cap */}
           <Compiled>
+            {/* Every employee is a real human avatar — no stylized overflow */}
             <RealisticCrowd layout={layout} />
-            <Crowd layout={layout} skipFirst={realisticPerZone(quality)} />
           </Compiled>
         </Suspense>
       ) : (

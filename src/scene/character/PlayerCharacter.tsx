@@ -1,7 +1,6 @@
 import { Suspense, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { Html } from '@react-three/drei';
 import { STATUS_COLORS } from '../../config/constants';
 import { engine } from '../../simulation/engine';
 import { useCharacterStore } from '../../state/characterStore';
@@ -51,9 +50,21 @@ function StylizedBody() {
 }
 
 /**
- * The controllable employee ("You"): distinct cyan outfit, glow status ring,
- * name tag. Ring color tracks the zone the character is standing in.
+ * The controllable employee: distinct cyan outfit and a glow status ring, and
+ * deliberately no floating label — you already know which body is yours, and a
+ * tag pinned over its head sits between the camera and the office you are here
+ * to look at. Ring colour tracks the zone the character is standing in.
+ *
+ * The ring is how the walker *feels* the air: it is the same green / amber /
+ * red scale as every occupant's safety ring and every zone panel, and it also
+ * beats faster and harder as the air worsens — a slow calm glow in good air, an
+ * insistent pulse in red. Rate rather than colour alone, because a colour is
+ * read once and then stops being noticed, while a change of rhythm keeps
+ * signalling. Colour and rate are both eased, so a zone tipping over reads as
+ * the room turning rather than a value flipping.
  */
+const ringTarget = new THREE.Color();
+
 export function PlayerCharacter({ layout }: { layout: OfficeLayout }) {
   const groupRef = useRef<THREE.Group>(null);
   const ringMat = useRef<THREE.MeshBasicMaterial>(null);
@@ -61,12 +72,18 @@ export function PlayerCharacter({ layout }: { layout: OfficeLayout }) {
   const realistic = useUiStore((s) => s.renderMode === 'realistic');
   useCharacterController(groupRef, layout);
 
+  /** Eased pulse rate, so the tempo change is felt rather than snapped. */
+  const beat = useRef(3);
+
   useFrame((state, dt) => {
     if (!ringMat.current) return;
     const status = engine.snapshot.zones.find((z) => z.id === zone)?.status ?? 'green';
-    const target = new THREE.Color(STATUS_COLORS[status]);
-    ringMat.current.color.lerp(target, 1 - Math.exp(-6 * dt));
-    ringMat.current.opacity = 0.75 + Math.sin(state.clock.elapsedTime * 3) * 0.2;
+    ringTarget.set(STATUS_COLORS[status]);
+    ringMat.current.color.lerp(ringTarget, 1 - Math.exp(-6 * dt));
+    const wanted = status === 'red' ? 7.5 : status === 'yellow' ? 4.8 : 2.6;
+    beat.current += (wanted - beat.current) * (1 - Math.exp(-2 * dt));
+    const swing = status === 'red' ? 0.3 : status === 'yellow' ? 0.24 : 0.18;
+    ringMat.current.opacity = 0.72 + Math.sin(state.clock.elapsedTime * beat.current) * swing;
   });
 
   return (
@@ -87,25 +104,6 @@ export function PlayerCharacter({ layout }: { layout: OfficeLayout }) {
         <ringGeometry args={[0.32, 0.44, 32]} />
         <meshBasicMaterial ref={ringMat} transparent side={THREE.DoubleSide} />
       </mesh>
-      {/* Name tag */}
-      <Html position={[0, 1.95, 0]} center distanceFactor={14} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-        <div
-          style={{
-            fontFamily: 'Inter, sans-serif',
-            fontSize: 12,
-            fontWeight: 700,
-            letterSpacing: 1.5,
-            color: '#a8ecff',
-            background: 'rgba(8,18,34,0.75)',
-            border: '1px solid rgba(56,225,255,0.4)',
-            borderRadius: 8,
-            padding: '2px 8px',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          YOU
-        </div>
-      </Html>
     </group>
   );
 }

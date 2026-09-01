@@ -10,8 +10,10 @@ export function useKeyboard() {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
       keys.current[e.code] = true;
-      // Arrow keys drive the avatar — stop them scrolling the page
-      if (e.code.startsWith('Arrow')) e.preventDefault();
+      // Arrow keys drive the avatar — stop them scrolling the page. Ctrl + A/D
+      // turn the avatar, so they must not reach the browser as select-all and
+      // add-bookmark; the arrow form of the same turn needs no such rescue.
+      if (e.code.startsWith('Arrow') || (e.ctrlKey && (e.code === 'KeyA' || e.code === 'KeyD'))) e.preventDefault();
     };
     const up = (e: KeyboardEvent) => {
       keys.current[e.code] = false;

@@ -31,6 +31,7 @@ export function GlassDoorLeaf({
   dir: 1 | -1;
   realistic: boolean;
 }) {
+  const ultra = useUiStore((st) => st.quality === 'ultra');
   const frame = realistic ? '#cfd4db' : '#3a4a60';
   const bar = realistic ? '#d9dde3' : '#8fd8ff';
   const ox = -dir * width / 2; // leaf centre offset from hinge
@@ -45,7 +46,7 @@ export function GlassDoorLeaf({
             opacity={realistic ? 0.22 : 0.26}
             roughness={0.03}
             metalness={0.05}
-            clearcoat={1}
+            clearcoat={ultra ? 1 : 0}
           />
         </mesh>
         {/* Stiles + rails */}
@@ -85,6 +86,7 @@ export function GlassDoorLeaf({
  * pendants (realistic tables/pendants come from RealisticFurniture/Ceiling).
  */
 function GlassRoom({ area, realistic }: { area: AreaRect; realistic: boolean }) {
+  const ultra = useUiStore((st) => st.quality === 'ultra');
   const room = useSimStore((s) => s.params.room);
   const { cx, cz, w, d, doorX, label, kind } = area;
   const glassH = 2.5;
@@ -94,8 +96,17 @@ function GlassRoom({ area, realistic }: { area: AreaRect; realistic: boolean }) 
   // Architectural glass: the convincing part is the *reflection*, not
   // transparency, so this leans on the HDR office environment map rather than
   // `transmission` (which would force three into a whole extra render pass of
-  // the scene per pane — far too expensive here). ior 1.52 + a clearcoat give
-  // the bright grazing-angle sheen and edge highlight real glazing has.
+  // the scene per pane — far too expensive here). ior 1.52 gives the bright
+  // grazing-angle sheen and edge highlight real glazing has.
+  //
+  // The clearcoat layer is **ultra only**. It is a second full specular lobe
+  // evaluated per fragment, and these panes are large, double-sided and
+  // transparent, so they are exactly the pixels a weak GPU can least afford to
+  // shade twice. Dropping it takes the `USE_CLEARCOAT` branch out of the
+  // compiled shader altogether rather than multiplying by zero. The HDR look is
+  // untouched — that comes from `envMapIntensity` reflecting the baked office
+  // rig, which is nudged up slightly here to carry the sheen the clearcoat was
+  // adding.
   const glassMat = (
     <meshPhysicalMaterial
       color={realistic ? '#cfe2ec' : '#bfe0f2'}
@@ -106,9 +117,9 @@ function GlassRoom({ area, realistic }: { area: AreaRect; realistic: boolean }) 
       ior={1.52}
       reflectivity={0.62}
       specularIntensity={1}
-      clearcoat={1}
+      clearcoat={ultra ? 1 : 0}
       clearcoatRoughness={0.02}
-      envMapIntensity={realistic ? 2.2 : 1}
+      envMapIntensity={realistic ? (ultra ? 2.2 : 2.45) : 1}
       side={THREE.DoubleSide}
     />
   );

@@ -6,7 +6,8 @@ import { SkeletonUtils } from 'three-stdlib';
 import { useSimStore } from '../../state/simStore';
 import type { OfficeLayout } from '../office/officeLayout';
 import { useUiStore } from '../../state/uiStore';
-import { FEMALE_MODELS, getRetargetedClips, MALE_MODELS, normalizeHeight, prepareAvatarSource, tierUrl } from './realisticPeople';
+import { applyFaceLod, collectFaceParts, faceLodDistance, FEMALE_MODELS, getRetargetedClips, MALE_MODELS, normalizeHeight, prepareAvatarSource, tierUrl } from './realisticPeople';
+import { detailLevel } from '../../utils/autoTune';
 
 const SOLDIER_URL = '/models/Soldier.glb';
 const WALK_SPEED = 1.15; // m/s — casual office pace
@@ -34,17 +35,27 @@ function Npc({
 }) {
   const { scene } = useGLTF(url);
   const soldier = useGLTF(SOLDIER_URL);
-  const clone = useMemo(() => {
+  const { clone, faceParts } = useMemo(() => {
     prepareAvatarSource(scene);
     const c = SkeletonUtils.clone(scene);
     c.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) {
-        o.castShadow = true;
-        (o as THREE.Mesh).frustumCulled = false;
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      o.castShadow = true;
+      // Frustum-culled, not force-drawn. Six walkers at ~7 skinned draws each is
+      // 42 draws that were being submitted even when every one of them was
+      // behind the camera — which, walking the office in full mode, is most of
+      // the time. A skinned mesh's bind-pose sphere under-covers an animated
+      // pose, so it is padded generously; the same trick the seated crowd uses.
+      const sm = m as THREE.SkinnedMesh;
+      if (sm.isSkinnedMesh) {
+        sm.computeBoundingSphere();
+        if (sm.boundingSphere) sm.boundingSphere.radius *= 1.6;
       }
+      m.frustumCulled = true;
     });
     normalizeHeight(c, female ? 1.62 : 1.74);
-    return c;
+    return { clone: c, faceParts: collectFaceParts(c) };
   }, [scene, female]);
   const clips = useMemo(() => getRetargetedClips(soldier, scene), [soldier, scene]);
   const groupRef = useRef<THREE.Group>(null);
@@ -80,10 +91,19 @@ function Npc({
     }
   };
 
-  useFrame((_, rawDt) => {
+  useFrame((state, rawDt) => {
     const group = groupRef.current;
     if (!group || route.length < 2) return;
     const dt = Math.min(rawDt, 0.1);
+
+    // Facial-detail LOD. Walkers cross the whole floor, so most of the time
+    // they are far enough away that their eyes and teeth are sub-pixel — and
+    // they are the characters most often seen at a distance.
+    applyFaceLod(
+      faceParts,
+      state.camera.position.distanceTo(group.position),
+      faceLodDistance(useUiStore.getState().autoTune, detailLevel().faceDist),
+    );
 
     if (pauseLeft.current > 0) {
       pauseLeft.current -= dt;

@@ -10,6 +10,7 @@ import { ZONE_IDS } from '../../simulation/zones';
 import { useCharacterStore } from '../../state/characterStore';
 import { useSimStore } from '../../state/simStore';
 import { useUiStore } from '../../state/uiStore';
+import { detailLevel } from '../../utils/autoTune';
 import type { Status, ZoneId } from '../../types/environment';
 import { playerOccupies } from '../character/seatPicking';
 import { seededRandom } from '../../utils/math';
@@ -19,7 +20,10 @@ import { makeWarnTexture } from './Crowd';
 import {
   ALL_PEOPLE_MODELS,
   ALL_PEOPLE_MODELS_LITE,
+  applyFaceLod,
   applyPose,
+  FACE_PART_RE,
+  faceLodDistance,
   findPoseBones,
   modelForSeed,
   normalizeHeight,
@@ -30,8 +34,25 @@ import {
 const tmpColor = new THREE.Color();
 const tmpObj = new THREE.Object3D();
 const tmpVec = new THREE.Vector3();
-/** Beyond this camera distance seated avatars freeze their micro-animation (LOD). */
-const ANIM_LOD_DIST = 22;
+/**
+ * Baseline LOD distances, used when auto-tune is off. With it on, the live
+ * values come from the adaptive detail level (`utils/autoTune.ts`), which pulls
+ * both distances in when the frame rate needs the help — distant micro-motion
+ * and sub-pixel faces are the cheapest detail in the scene to give up.
+ */
+const BASE_ANIM_LOD_DIST = 22;
+/**
+ * Beyond this camera distance an avatar's facial submeshes (eyes, glands,
+ * teeth) are hidden. Each VALID avatar is ~7 separate skinned draws and six of
+ * them are these face parts, which carry almost no triangles but cost a full
+ * draw + skinning setup each — at 37 avatars that is 222 of 268 skinned draws
+ * spent on features that cover well under a pixel past a few metres. They pop
+ * back in as soon as you walk up to someone, so close-up inspection is
+ * unchanged. Bodies and hair are never culled this way.
+ */
+// FACE_PART_RE / BASE_FACE_LOD_DIST / applyFaceLod now live in realisticPeople
+// so the walkers, the player and the crowd all share one implementation — the
+// LOD is a property of the avatar asset, not of the crowd.
 
 /** Upper bound of skinned avatars per zone (slots cap the real count anyway). */
 export const REALISTIC_PER_ZONE = Number.POSITIVE_INFINITY;
@@ -84,7 +105,7 @@ function RealPerson({
   const phase = seededRandom(seed) * Math.PI * 2;
 
   const ultra = useUiStore((s) => s.ultraQuality);
-  const { clone, spineRot, headRot, lHand, rHand } = useMemo(() => {
+  const { clone, spineRot, headRot, lHand, rHand, faceParts } = useMemo(() => {
     prepareAvatarSource(scene);
     const c = SkeletonUtils.clone(scene);
     c.traverse((o) => {
@@ -108,14 +129,17 @@ function RealPerson({
     // Skinned meshes are culled with a bounding sphere computed from the posed
     // skeleton (three ≥ r153), padded for breathing/typing motion
     c.updateMatrixWorld(true);
+    const face: THREE.SkinnedMesh[] = [];
     c.traverse((o) => {
       const sm = o as THREE.SkinnedMesh;
       if (sm.isSkinnedMesh) {
         sm.computeBoundingSphere();
         if (sm.boundingSphere) sm.boundingSphere.radius *= 1.25;
+        if (FACE_PART_RE.test(sm.name)) face.push(sm);
       }
     });
     return {
+      faceParts: face,
       clone: c,
       spineRot: new WorldXRotator(b.spine),
       headRot: new WorldXRotator(b.head),
@@ -147,7 +171,20 @@ function RealPerson({
 
     // LOD: far from the camera the pose is static (bones untouched → no extra work)
     tmpVec.set(px, 1, pz);
-    const far = camera.position.distanceTo(tmpVec) > ANIM_LOD_DIST;
+    const dist = camera.position.distanceTo(tmpVec);
+
+    // Facial-detail LOD — drops six of this avatar's ~seven skinned draws once
+    // the eyes/teeth are too small to resolve. The guard reads the meshes' real
+    // state rather than a remembered one: `useAsyncCompile` reveals a subtree by
+    // setting `visible = true` on every mesh it hid at mount, so a cached flag
+    // silently desyncs the first time an avatar streams in and the LOD then
+    // never re-applies. Comparing against the mesh keeps it self-healing, and
+    // costs one read per person per frame.
+    const lod = detailLevel();
+    const autoLod = useUiStore.getState().autoTune;
+    applyFaceLod(faceParts, dist, faceLodDistance(autoLod, lod.faceDist));
+
+    const far = dist > (autoLod ? lod.animDist : BASE_ANIM_LOD_DIST);
     if (far && !affected) return;
 
     // Breathing + affected slump (forward lean = negative world-X rotation)
@@ -170,7 +207,8 @@ function RealPerson({
           (slot.seated ? 1.55 : 2.05) + Math.sin(t * 2.4 + phase) * 0.05;
       }
     }
-  }, [zone, seed, px, pz, phase, slot.seated, spineRot, headRot, lHand, rHand]);
+  }, [zone, seed, px, pz, phase, slot.seated, spineRot, headRot, lHand, rHand, faceParts]);
+
 
   useEffect(() => register(tick), [register, tick]);
 

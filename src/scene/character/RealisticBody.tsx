@@ -5,7 +5,10 @@ import { useAnimations, useGLTF } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import { characterTransient, useCharacterStore } from '../../state/characterStore';
 import {
+  applyFaceLod,
   applyPose,
+  collectFaceParts,
+  faceLodDistance,
   findPoseBones,
   getRetargetedClips,
   normalizeHeight,
@@ -13,6 +16,8 @@ import {
   prepareAvatarSource,
   WorldXRotator,
 } from '../people/realisticPeople';
+import { detailLevel } from '../../utils/autoTune';
+import { useUiStore } from '../../state/uiStore';
 import { applyDancePose, applyLaptopPose, captureRest, restoreRest, withNeutralAncestors } from './emotes';
 
 const SOLDIER_URL = '/models/Soldier.glb';
@@ -27,12 +32,14 @@ const SOLDIER_URL = '/models/Soldier.glb';
  * seated crowd's (`applyPose`). All actions are stopped first, otherwise the
  * mixer would overwrite the bone rotations every frame.
  */
+const lodPos = new THREE.Vector3();
+
 export function RealisticBody() {
   const { scene } = useGLTF(PLAYER_MODEL);
   const soldier = useGLTF(SOLDIER_URL);
   const activity = useCharacterStore((s) => s.activity);
 
-  const { clone, bones, rest } = useMemo(() => {
+  const { clone, bones, rest, faceParts } = useMemo(() => {
     prepareAvatarSource(scene);
     const c = SkeletonUtils.clone(scene);
     c.traverse((o) => {
@@ -43,7 +50,7 @@ export function RealisticBody() {
     });
     normalizeHeight(c, 1.74);
     const b = findPoseBones(c);
-    return { clone: c, bones: b, rest: captureRest(b) };
+    return { clone: c, bones: b, rest: captureRest(b), faceParts: collectFaceParts(c) };
   }, [scene]);
 
   const clips = useMemo(() => getRetargetedClips(soldier, scene), [soldier, scene]);
@@ -108,6 +115,15 @@ export function RealisticBody() {
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
+
+    // Facial-detail LOD. In follow cam the player is a few metres away and keeps
+    // a full face; in orbit the camera is often 20 m+ out, where six of these
+    // seven skinned draws are sub-pixel.
+    applyFaceLod(
+      faceParts,
+      state.camera.position.distanceTo(lodPos.set(characterTransient.position.x, 1, characterTransient.position.z)),
+      faceLodDistance(useUiStore.getState().autoTune, detailLevel().faceDist),
+    );
 
     if (activity === 'dancing') {
       // rotateBoneWorld composes onto the current rotation, so rebuild from

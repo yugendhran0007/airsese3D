@@ -123,3 +123,103 @@ input[type='range']::-moz-range-thumb {
 .alert-pulse {
   animation: pulse-glow 1.6s ease-in-out infinite;
 }
+
+/* ---------------------------------------------------------------------------
+   Finstein boot animation (LoadingScreen).
+
+   Every one of these animates ONLY transform and opacity, which Chrome runs on
+   the compositor. That is the whole point: the boot screen is on screen exactly
+   while the main thread is saturated compiling shaders and decoding GLBs, so an
+   animation that needed layout or paint would stutter at precisely the moment
+   it is meant to reassure the user that nothing has hung.
+--------------------------------------------------------------------------- */
+@keyframes fin-block {
+  from {
+    opacity: 0;
+    transform: scale(0.15);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fin-wipe {
+  from {
+    transform: translateX(-101%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fin-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fin-breathe {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.015);
+  }
+}
+
+/* Light sweep travelling across the lockup, as on the wall TVs. */
+@keyframes fin-sweep {
+  from {
+    transform: translateX(-140%);
+  }
+  to {
+    transform: translateX(240%);
+  }
+}
+
+.fin-block {
+  transform-box: fill-box;
+  transform-origin: 0% 100%;
+  animation: fin-block 0.62s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fin-block,
+  .fin-wipe,
+  .fin-rise,
+  .fin-breathe,
+  .fin-sweep {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Notification bell: a short shake when a new alert arrives. Transform only, so
+   it composites; a count that silently increments is easy to miss. */
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(-16deg); }
+  30% { transform: rotate(13deg); }
+  45% { transform: rotate(-10deg); }
+  60% { transform: rotate(7deg); }
+  75% { transform: rotate(-4deg); }
+}
+
+.bell-ring {
+  transform-origin: 50% 15%;
+  animation: bell-ring 0.9s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bell-ring { animation: none; }
+}

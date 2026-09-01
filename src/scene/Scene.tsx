@@ -2,12 +2,14 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { PerformanceMonitor } from '@react-three/drei';
+import { dprForBudget } from '../utils/renderScale';
+import { resetAutoTune, stepAutoTune, useDetailLevel } from '../utils/autoTune';
 import { updateRampMode } from '../simulation/rampMode';
 import { updateScenarioPlayer } from '../simulation/scenarioPlayer';
 import { characterTransient } from '../state/characterStore';
 import { useSimStore } from '../state/simStore';
 import { useUiStore } from '../state/uiStore';
-import { AirflowParticles } from './airflow/AirflowParticles';
+import { AirflowRibbons } from './airflow/AirflowRibbons';
 import { CameraRig } from './CameraRig';
 import { ClickMarker } from './character/ClickMarker';
 import { PlayerCharacter } from './character/PlayerCharacter';
@@ -153,12 +155,16 @@ function FloorClickTarget() {
 function OfficeWorld() {
   const layout = useOfficeLayout();
   const realistic = useUiStore((s) => s.renderMode === 'realistic');
+  // A tier switch recompiles every program (shadow toggle) and re-streams the
+  // avatars; re-pace those through `Compiled` instead of paying for all of
+  // them in one frame — see `Compiled` for the measurement.
+  const quality = useUiStore((s) => s.quality);
   // A downloaded model in public/models/office/ (e.g. Sketchfab "Office
   // Studio", CC-BY) replaces the built-in building shell when present.
   const customOfficeUrl = useCustomOfficeUrl();
   const hasCustomOffice = customOfficeUrl !== null && customOfficeUrl !== 'pending';
   return (
-    <Compiled>
+    <Compiled deps={[quality, realistic]}>
       {realistic && <RealisticEnvironment />}
       {hasCustomOffice ? (
         <Suspense fallback={<OfficeShell />}>
@@ -191,7 +197,7 @@ function OfficeWorld() {
         <Suspense fallback={<Crowd layout={layout} />}>
           {/* Photorealistic avatars for every employee; instanced crowd only
               renders overflow past the per-zone avatar cap */}
-          <Compiled>
+          <Compiled deps={[quality]}>
             {/* Every employee is a real human avatar — no stylized overflow */}
             <RealisticCrowd layout={layout} />
           </Compiled>
@@ -201,7 +207,7 @@ function OfficeWorld() {
       )}
       {realistic && (
         <Suspense fallback={null}>
-          <Compiled>
+          <Compiled deps={[quality]}>
             <WanderingNpcs layout={layout} />
           </Compiled>
         </Suspense>
@@ -211,9 +217,34 @@ function OfficeWorld() {
       <SeatTargets layout={layout} />
       <ClickMarker />
       <FloorClickTarget />
-      <AirflowParticles />
+      <AirflowRibbons />
     </Compiled>
   );
+}
+
+/**
+ * Feeds every rendered frame to the adaptive detail controller. One `useFrame`
+ * for the whole app: the controller keeps its own state at module level and
+ * only touches React on the rare occasion the detail level actually moves.
+ */
+/**
+ * Never let the adaptive render scale take the canvas below this many
+ * megapixels. Measured on an Intel UHD with the ladder at its floor: 0.52 MPix
+ * ran at 22–25 fps, and 0.28 MPix — the same 0.5× rung on a 1.25-DPR laptop
+ * viewport — ran at 22–25 fps too. Below about half a megapixel the frame is
+ * no longer fragment-bound; what remains is the avatars' vertex and draw work,
+ * so every pixel shed past that point is sharpness given away for nothing. The
+ * ratchet cannot see this on its own (one rung is under the noise of a
+ * one-second window — see `autoTune.ts`), so the floor is absolute. It binds
+ * only when the *scale* pushed the canvas under it: a base ratio that is
+ * already lower (a TV budget on an 8K viewport) is left alone.
+ */
+const MIN_RENDER_MPIX = 0.5;
+
+function AutoTuner() {
+  const autoTune = useUiStore((s) => s.autoTune);
+  useFrame((_, dt) => stepAutoTune(dt, autoTune));
+  return null;
 }
 
 export function Scene() {
@@ -221,11 +252,38 @@ export function Scene() {
   // steps the device-pixel-ratio between 0.8× and 2× so a fast GPU gets a
   // crisp picture while an integrated one keeps a smooth frame rate.
   const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio));
+  // Presentation output: the canvas is sized from an absolute pixel budget, so
+  // the same setting behaves identically on this laptop panel and on the 64" 8K
+  // TV (where a device-ratio multiple would ask for 15–33 MPix a frame).
+  // Recomputed on resize because the budget depends on the CSS viewport.
+  const tvMode = useUiStore((s) => s.tvMode);
+  const tvBudgetMp = useUiStore((s) => s.tvBudgetMp);
+  const [viewport, setViewport] = useState(() => [window.innerWidth, window.innerHeight] as const);
+  useEffect(() => {
+    if (!tvMode) return;
+    const on = () => setViewport([window.innerWidth, window.innerHeight] as const);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, [tvMode]);
+  const tvDpr = dprForBudget(tvBudgetMp, viewport[0], viewport[1]);
   // "8K" ultra mode: pin the canvas at the device's full pixel ratio (up to 2×)
   // and let the SMAA/mipmapped textures do the rest — no adaptive downscale.
   const quality = useUiStore((s) => s.quality);
   const ultra = quality === 'ultra';
   const fast = quality === 'fast';
+  // Adaptive detail: the measured-frame-rate controller owns the final render
+  // scale whenever it is on. It supersedes PerformanceMonitor's DPR stepping —
+  // two controllers fighting over the same number is how a picture ends up
+  // pulsing — so those callbacks stand down below.
+  const autoTune = useUiStore((s) => s.autoTune);
+  const detail = useDetailLevel();
+  const renderMode = useUiStore((s) => s.renderMode);
+  // A tier, render-mode or presentation-mode switch changes the cost of a frame
+  // wholesale, so whatever level the controller settled on describes a scene
+  // that no longer exists. Start measuring again.
+  useEffect(() => {
+    resetAutoTune();
+  }, [quality, renderMode, tvMode]);
   // Stop rendering entirely while the tab is hidden (the 10 Hz engine keeps
   // simulating, so the picture is current the moment the tab returns)
   const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
@@ -234,14 +292,27 @@ export function Scene() {
     document.addEventListener('visibilitychange', on);
     return () => document.removeEventListener('visibilitychange', on);
   }, []);
+  const baseDpr = tvMode ? tvDpr : ultra ? Math.min(2, window.devicePixelRatio) : fast ? Math.min(1, dpr) : dpr;
+  const scaledDpr = baseDpr * (autoTune ? detail.renderScale : 1);
+  const floorDpr = Math.min(baseDpr, Math.sqrt((MIN_RENDER_MPIX * 1e6) / Math.max(1, window.innerWidth * window.innerHeight)));
   return (
     <Canvas
       shadows
       frameloop={visible ? 'always' : 'never'}
-      dpr={ultra ? Math.min(2, window.devicePixelRatio) : fast ? Math.min(1, dpr) : dpr}
+      dpr={Math.max(scaledDpr, floorDpr)}
       camera={{ position: [24, 14, 26], fov: 45, near: 0.1, far: 300 }}
       gl={{
-        antialias: false,
+        // MSAA on the default framebuffer. `antialias` is fixed at context
+        // creation, so it cannot follow the quality tier — and it must be on,
+        // because postprocessing (which brings SMAA) is exactly what Fast and
+        // auto-tune's lower rungs give up first. Without it those tiers render
+        // with *no* antialiasing at all, and on a big panel the canvas is
+        // already being upscaled, which makes every stair-step twice as wide.
+        // When the composer does run it renders to its own target and this
+        // costs only the extra sample memory on a buffer nothing reads.
+        // `?noaa` is a diagnostic only (like `?nofx`): measured on an Intel
+        // UHD the 4× MSAA costs ~10 % at 1.5 MPix and nothing at 0.5 MPix.
+        antialias: !new URLSearchParams(window.location.search).has('noaa'),
         powerPreference: 'high-performance',
         toneMapping: THREE.AgXToneMapping,
         toneMappingExposure: 1.45,
@@ -258,9 +329,13 @@ export function Scene() {
       <PerformanceMonitor
         bounds={() => [40, 58]}
         flipflops={3}
-        onIncline={() => setDpr((d) => Math.min(2, window.devicePixelRatio, d + 0.25))}
-        onDecline={() => setDpr((d) => Math.max(0.8, d - 0.25))}
+        // Presentation mode holds the picture still: the budget already fixes
+        // the resolution, and a tier drop or resolution step part-way through a
+        // talk is far more jarring on a 64" screen than a few slow frames.
+        onIncline={() => { if (!tvMode && !autoTune) setDpr((d) => Math.min(2, window.devicePixelRatio, d + 0.25)); }}
+        onDecline={() => { if (!tvMode && !autoTune) setDpr((d) => Math.max(0.8, d - 0.25)); }}
         onFallback={() => {
+          if (tvMode || autoTune) return;
           setDpr(0.8);
           // Sustained poor frame rate: drop to the lightweight tier automatically
           if (useUiStore.getState().quality === 'balanced') useUiStore.getState().setQuality('fast');
@@ -273,6 +348,7 @@ export function Scene() {
         <CameraRig />
         <ScenarioDriver />
         <ShadowScheduler />
+        <AutoTuner />
         {!fast && <Effects />}
       </Suspense>
     </Canvas>

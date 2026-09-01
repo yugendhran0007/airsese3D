@@ -130,22 +130,40 @@ export function RealisticEnvironment() {
   const scene = useThree((s) => s.scene);
   const accent = OFFICE_THEMES[useUiStore((s) => s.officeTheme)].accentLight;
   const quality = useUiStore((s) => s.quality);
+  const tvMode = useUiStore((s) => s.tvMode);
 
   useEffect(() => {
+    // The environment is baked once, not per frame, so presentation mode can
+    // afford the full-resolution cube at any tier: on a 64" screen the glass,
+    // chrome and screen bezels reflect it directly, and a 128²/256² bake is
+    // what makes those surfaces read as flat grey smears from across a room.
+    const sharpEnv = quality === 'ultra' || tvMode;
     const ultra = quality === 'ultra';
-    const fast = quality === 'fast';
     const pmrem = new THREE.PMREMGenerator(gl);
     pmrem.compileEquirectangularShader();
-    const envScene = buildOfficeEnvironment(accent, !fast);
+    // The detailed rig at every tier now: a 512 bake of a simplified rig wastes
+    // the resolution it was just given.
+    const envScene = buildOfficeEnvironment(accent, true);
     // Sharper mip 0 at higher tiers: a smaller blur sigma preserves the window
     // and LED shapes that the extra resolution is there to capture.
-    const envTexture = pmrem.fromScene(envScene, ultra ? 0.008 : 0.02, 0.1, 100, {
-      size: ultra ? 1024 : fast ? 128 : 256,
+    // Fast 128 -> 512 and Balanced 256 -> 512. This is the room's image-based
+    // light, and it is baked ONCE: it costs a slightly longer bake at startup
+    // and nothing per frame. Measured on this machine the frame rate is bound by
+    // skinned-avatar vertex work, not by fragment or texture cost, so a sharper
+    // environment is close to free here while being one of the largest visible
+    // quality gains available — 128 is where window mullions and the LED runs
+    // smear into a flat grey wash in every glass and chrome reflection.
+    const envTexture = pmrem.fromScene(envScene, sharpEnv ? 0.008 : 0.014, 0.1, 100, {
+      size: sharpEnv ? 1024 : 512,
       position: new THREE.Vector3(0, 1.6, 0),
     }).texture;
     scene.environment = envTexture;
-    // Without the ultra point lights the IBL carries more of the ambient
-    scene.environmentIntensity = ultra ? 0.55 : 0.8;
+    // The IBL is the room's ambient light, not a garnish on top of one: the
+    // flat ambient/hemisphere terms in `Lighting` were cut back so this can
+    // carry it, with the directionality a baked office rig has and a constant
+    // term cannot. Ultra keeps a lower value because its four point lights add
+    // their own interior fill.
+    scene.environmentIntensity = ultra ? 0.85 : 1.15;
     envScene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh) {
@@ -158,7 +176,7 @@ export function RealisticEnvironment() {
       envTexture.dispose();
       pmrem.dispose();
     };
-  }, [gl, scene, accent, quality]);
+  }, [gl, scene, accent, quality, tvMode]);
 
   return null;
 }

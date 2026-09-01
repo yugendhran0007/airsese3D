@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start": "npm run build && vite preview --host --port 4173",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --host --port 4173",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

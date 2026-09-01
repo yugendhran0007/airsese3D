@@ -409,3 +409,57 @@ export function applyPose(bones: PoseBones, kind: SeatKind | 'stand', vary: numb
   }
   rotateBoneWorld(bones.head, AXIS_Y, (vary - 0.5) * (kind === 'desk' ? 0.15 : 0.5));
 }
+
+/**
+ * Facial-detail LOD, shared by every skinned character in the office.
+ *
+ * A VALID avatar is ~7 skinned draws and six of them are the eyes, tear glands
+ * and teeth — features that carry almost no triangles and cover well under a
+ * pixel past a few metres, yet each costs a full skinned draw call. Hiding them
+ * at distance is the single cheapest draw-call saving in the scene: measured
+ * from the default orbit camera (avatars 22–51 m away) it removes on the order
+ * of a hundred draws. Hair and bodies are never culled this way.
+ *
+ * This lived only in `RealisticCrowd`, so the walkers, the player and anyone
+ * else built from an avatar kept drawing full faces at any distance. It is a
+ * property of the asset, not of the crowd, so it belongs here.
+ */
+export const FACE_PART_RE = /eye|gland|teeth/i;
+
+/** Metres past which the facial submeshes stop being worth their draw calls. */
+export const BASE_FACE_LOD_DIST = 7;
+
+/** Every facial submesh under `root`, ready to be toggled as a set. */
+export function collectFaceParts(root: THREE.Object3D): THREE.SkinnedMesh[] {
+  const out: THREE.SkinnedMesh[] = [];
+  root.traverse((o) => {
+    const sm = o as THREE.SkinnedMesh;
+    if (sm.isSkinnedMesh && FACE_PART_RE.test(sm.name)) out.push(sm);
+  });
+  return out;
+}
+
+/**
+ * Current LOD distance, honouring the auto-tune detail rung. Read it once per
+ * frame and pass it to `applyFaceLod` rather than calling it per character —
+ * the crowd runs this for every occupant from a single `useFrame`.
+ */
+export function faceLodDistance(autoTune: boolean, rungDist: number): number {
+  return autoTune ? rungDist : BASE_FACE_LOD_DIST;
+}
+
+/**
+ * Show or hide a character's facial submeshes for the given camera distance.
+ *
+ * The guard reads the meshes' **real** visibility rather than a remembered
+ * flag: `useAsyncCompile` reveals a subtree by setting `visible = true` on every
+ * mesh it hid at mount, so a cached boolean silently desyncs the first time an
+ * avatar streams in and the LOD then never re-applies again. Comparing against
+ * the mesh itself keeps this self-healing for one property read per frame.
+ */
+export function applyFaceLod(parts: THREE.SkinnedMesh[], dist: number, threshold: number): void {
+  if (parts.length === 0) return;
+  const on = dist < threshold;
+  if (parts[0].visible === on) return;
+  for (let i = 0; i < parts.length; i++) parts[i].visible = on;
+}

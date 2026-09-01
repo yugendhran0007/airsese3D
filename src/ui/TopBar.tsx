@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
+import { RENDER_BUDGETS, renderResolutionLabel } from '../utils/renderScale';
 import { OFFICE_THEMES, OFFICE_THEME_IDS, type OfficeThemeId } from '../config/officeThemes';
 import {
   BarChart3,
@@ -14,13 +15,65 @@ import {
   User,
   Users,
   Wind,
+  MonitorPlay,
+  Maximize,
+  Minimize,
 } from 'lucide-react';
 import { STATUS_COLORS } from '../config/constants';
 import { useSimStore } from '../state/simStore';
 import { useUiStore, type AppMode } from '../state/uiStore';
 import { CloseX } from './shell/CloseX';
+import { ControlCluster } from './controls/ControlCluster';
+import { NotificationBell } from './alerts/NotificationBell';
 
 const SPEEDS = [0.5, 1, 2, 5, 10];
+
+/** Pointer distance from the top edge, in CSS px, that reveals the bar in full mode. */
+const REVEAL_ZONE_PX = 96;
+
+/**
+ * Full mode hides the navbar until the pointer asks for it.
+ *
+ * Reveal is not just "pointer near the top": the popovers hang *below* the bar,
+ * so a pointer 300 px down may well be dragging one of its sliders. The bar
+ * therefore also stays up while the pointer is anywhere inside the header
+ * subtree (popovers are DOM children of it) and while a button is held, which
+ * covers dragging a slider clean off the panel.
+ *
+ * All three conditions are derived from one window-level `mousemove` and a
+ * hit-test against the header, rather than from React's onMouseEnter/onMouseLeave.
+ * Enter/leave only pair up if both events actually arrive: fading the bar to
+ * `pointer-events-none` under a resting pointer, a pointer that leaves the
+ * window, or a fullscreen transition can all swallow the leave and strand the
+ * bar visible forever. A hit-test cannot get stuck, because every move recomputes
+ * it from scratch.
+ */
+function useTopEdgeReveal(active: boolean, headerRef: React.RefObject<HTMLElement | null>): boolean {
+  const [near, setNear] = useState(false);
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setNear(false);
+      setHeld(false);
+      return;
+    }
+    const onMove = (e: MouseEvent) => {
+      const inHeader = !!headerRef.current?.contains(e.target as Node);
+      setNear(inHeader || e.clientY < REVEAL_ZONE_PX);
+    };
+    const onDown = () => setHeld(true);
+    const onUp = () => setHeld(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [active, headerRef]);
+  return !active || near || held;
+}
 
 const MODES: { id: AppMode; label: string; disabled?: boolean }[] = [
   { id: 'live', label: 'Chennai Live' },
@@ -44,6 +97,12 @@ export function TopBar() {
   const hideCard = useUiStore((s) => s.hideCard);
   const quality = useUiStore((s) => s.quality);
   const setQuality = useUiStore((s) => s.setQuality);
+  const tvMode = useUiStore((s) => s.tvMode);
+  const setTvMode = useUiStore((s) => s.setTvMode);
+  const tvBudgetMp = useUiStore((s) => s.tvBudgetMp);
+  const setTvBudgetMp = useUiStore((s) => s.setTvBudgetMp);
+  const fullMode = useUiStore((s) => s.fullMode);
+  const setFullMode = useUiStore((s) => s.setFullMode);
   const employeeMode = useUiStore((s) => s.employeeMode);
   const setEmployeeMode = useUiStore((s) => s.setEmployeeMode);
   const rampMode = useUiStore((s) => s.rampMode);
@@ -58,10 +117,42 @@ export function TopBar() {
 
   // The whole toolbar lives behind the AIRSENSE brand: click it to open/close.
   const [open, setOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const revealed = useTopEdgeReveal(fullMode, headerRef);
+
+  /**
+   * Full mode = browser fullscreen + a bare office. The two are kept separate on
+   * purpose: `requestFullscreen` can be refused (iframes, policy, no gesture),
+   * and when it is, hiding the panels is still most of what was asked for.
+   */
+  const toggleFullMode = () => {
+    const next = !fullMode;
+    setFullMode(next);
+    const el = document.documentElement;
+    try {
+      if (next && !document.fullscreenElement) void el.requestFullscreen?.();
+      else if (!next && document.fullscreenElement) void document.exitFullscreen?.();
+    } catch { /* fullscreen unavailable — the DOM half of full mode still applies */ }
+  };
 
   if (navHidden) return null;
   return (
-    <header className="glass scroll-thin pointer-events-auto absolute top-3 left-1/2 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 items-center gap-4 overflow-x-auto rounded-2xl px-5 py-2.5 [&>*]:shrink-0">
+    <header
+      ref={headerRef}
+      className={clsx(
+        // flex-wrap rather than overflow-x-auto: a scroll container clips the
+        // control popovers that hang below the bar, and on the large screens
+        // this bar is built for there is room to wrap instead of scroll.
+        // z-50: `.glass` sets `backdrop-filter`, which creates a stacking
+        // context, so the popovers hanging below this bar cannot escape it —
+        // their own z-index competes only *inside* the header. Without a
+        // z-index here the whole header paints in DOM order and loses to every
+        // dashboard panel that comes after it, which is what used to bury the
+        // Performance popover behind the alerts stack.
+        'glass pointer-events-auto absolute top-3 left-1/2 z-50 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-4 gap-y-2 rounded-2xl px-5 py-2.5 transition-opacity duration-200 [&>*]:shrink-0',
+        revealed ? 'opacity-100' : 'pointer-events-none opacity-0',
+      )}
+    >
       {/* Brand = menu button */}
       <button
         type="button"
@@ -80,6 +171,11 @@ export function TopBar() {
         />
         <span className={clsx('ml-1 text-[10px] text-ink-faint transition-transform', open && 'rotate-180')}>▾</span>
       </button>
+
+      {/* Alerts live in the bar at all times, collapsed or not — a notification
+          you have to expand a menu to discover is not a notification. */}
+      <div className="h-6 w-px bg-line" />
+      <NotificationBell />
 
       {/* Collapsed: just the clock + transport so the bar stays useful */}
       {!open && (
@@ -167,6 +263,11 @@ export function TopBar() {
 
       <div className="h-6 w-px bg-line" />
 
+      {/* Simulation knobs — one symbol per group, each opening a popover */}
+      <ControlCluster />
+
+      <div className="h-6 w-px bg-line" />
+
       {/* People-based data viz */}
       <button
         type="button"
@@ -249,6 +350,52 @@ export function TopBar() {
             </button>
           ))}
         </div>
+        {/* Presentation output: fixed render budget for a large external display */}
+        <button
+          type="button"
+          onClick={() => setTvMode(!tvMode)}
+          title={
+            tvMode
+              ? `Presentation mode ON — rendering ${renderResolutionLabel(tvBudgetMp)} and upscaling to the display. Quality is pinned: no adaptive downscale, no tier drop, antialiasing always on.`
+              : 'Presentation mode for a large external display (TV / projector): renders into a fixed pixel budget and holds quality steady for the whole talk'
+          }
+          className={clsx(
+            'num flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-extrabold tracking-wider uppercase transition-all',
+            tvMode ? 'border-warn/40 bg-warn/15 text-warn' : 'border-line text-ink-faint hover:text-ink',
+          )}
+        >
+          <MonitorPlay size={12} /> TV
+        </button>
+        {/* Full mode: fullscreen, office only, navbar auto-hides to the top edge */}
+        <button
+          type="button"
+          onClick={toggleFullMode}
+          title={
+            fullMode
+              ? 'Leave full mode (Esc) — brings the panels back'
+              : 'Full mode: fullscreen, panels hidden, just the walkable office. Move the pointer to the top edge for this bar; Esc leaves.'
+          }
+          className={clsx(
+            'flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-bold tracking-wider uppercase transition-all',
+            fullMode ? 'border-ok/60 bg-ok/15 text-ok' : 'border-line bg-white/5 text-ink-dim hover:text-ink',
+          )}
+        >
+          {fullMode ? <Minimize size={12} /> : <Maximize size={12} />} Full
+        </button>
+        {tvMode && (
+          <select
+            value={tvBudgetMp}
+            onChange={(e) => setTvBudgetMp(Number(e.target.value))}
+            title="Render resolution for the 3D view. The display upscales it; the DOM panels stay native. Lower = smoother."
+            className="h-7 rounded-lg border border-line bg-white/5 px-1.5 text-[10px] font-bold tracking-wider text-ink-dim uppercase hover:text-ink"
+          >
+            {(['low', 'hd', 'qhd', 'uhd'] as const).map((id) => (
+              <option key={id} value={RENDER_BUDGETS[id]}>
+                {id === 'low' ? 'Smoothest' : id === 'hd' ? '1080p' : id === 'qhd' ? '1440p' : '4K'}
+              </option>
+            ))}
+          </select>
+        )}
         {/* Interior theme preset (realistic mode) */}
         <select
           value={officeTheme}

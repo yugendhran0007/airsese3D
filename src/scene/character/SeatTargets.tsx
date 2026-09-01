@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
-import { ACCENT_COLOR } from '../../config/constants';
+import { ACCENT_COLOR, STATUS_COLORS } from '../../config/constants';
 import { characterTransient, useCharacterStore, walkToSeat } from '../../state/characterStore';
 import { useSimStore } from '../../state/simStore';
-import { freeSeats } from './seatPicking';
+import { freeSeats, seatStatus } from './seatPicking';
 import type { OfficeLayout, Seat } from '../office/officeLayout';
+
+const tmpColor = new THREE.Color();
 
 /** Free seats within this radius of the avatar light up as click targets. */
 const SHOW_RADIUS = 5;
@@ -18,6 +20,12 @@ const SCAN_INTERVAL = 0.25;
  * Click-to-sit targets: a pulsing ring on every empty chair near the avatar
  * (or on every empty chair while the seat picker is on). Clicking one walks
  * the avatar over and seats it at the laptop — see `useCharacterController`.
+ *
+ * Each ring is **tinted by the air quality of the seat's zone** — green good,
+ * amber acceptable, red poor — so choosing a chair is choosing air, not just a
+ * spot on the floor. It is the same `STATUS_COLORS` scale as the occupants'
+ * safety rings and the zone panels, read live from the engine snapshot inside
+ * `useFrame` (never lifted into React state, at one lerp per marker per frame).
  *
  * Deliberately 3D-only (no drei `Html`): scene-space labels outrank the DOM
  * panels' z-index, so a floating tag here would paint over the dashboard.
@@ -56,6 +64,7 @@ export function SeatTargets({ layout }: { layout: OfficeLayout }) {
 
     // --- Pulse (one loop for every marker, not one subscriber each) ---
     const pulse = 0.55 + Math.sin(state.clock.elapsedTime * 3) * 0.25;
+    const k = 1 - Math.exp(-4 * dt); // ease colour changes so a zone tipping over reads as a fade
     for (let i = 0; i < rings.current.length; i++) {
       const mesh = rings.current[i];
       if (!mesh) continue;
@@ -63,6 +72,13 @@ export function SeatTargets({ layout }: { layout: OfficeLayout }) {
       mat.opacity = i === hovered.current ? 0.95 : pulse;
       const s = i === hovered.current ? 1.15 : 1;
       mesh.scale.setScalar(s);
+      const seat = shown[i];
+      if (seat) {
+        tmpColor.set(STATUS_COLORS[seatStatus(seat)]);
+        mat.color.lerp(tmpColor, k);
+        const disc = mesh.parent?.children[1] as THREE.Mesh | undefined;
+        if (disc) (disc.material as THREE.MeshBasicMaterial).color.lerp(tmpColor, k);
+      }
     }
   });
 

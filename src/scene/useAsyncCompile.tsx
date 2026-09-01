@@ -111,9 +111,20 @@ export function useAsyncCompile(ref: RefObject<THREE.Object3D | null>, deps: rea
  * Gate a subtree behind useAsyncCompile for its initial mount. Place it just
  * inside a Suspense boundary (the resolved content commits as one unit) or
  * around the initial world so no single frame pays for every shader at once.
+ *
+ * `deps` re-runs the pacing when something changes the subtree's programs
+ * wholesale *after* mount. A quality-tier switch is the case that matters: it
+ * toggles the key light's shadow map, which changes the program cache key of
+ * every material in the office (~34 programs), and it swaps the avatars' GLBs.
+ * Without re-pacing those all compile on the first draw of the next frame —
+ * measured as a single 4.2 s frame on an Intel UHD (5.4 s of synchronous
+ * `getProgramParameter`), 2.4 s on the way back down. With the tier in `deps`
+ * the office is hidden and rebuilt a couple of program groups per frame, the
+ * same way it loads. Inside a Suspense boundary the effect fires at the commit
+ * that resolves the new content, which is exactly when the new meshes exist.
  */
-export function Compiled({ children }: { children: ReactNode }) {
+export function Compiled({ children, deps = [] }: { children: ReactNode; deps?: readonly unknown[] }) {
   const ref = useRef<THREE.Group>(null);
-  useAsyncCompile(ref, []);
+  useAsyncCompile(ref, deps);
   return <group ref={ref}>{children}</group>;
 }

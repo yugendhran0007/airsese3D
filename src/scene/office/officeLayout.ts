@@ -61,8 +61,8 @@ export interface OfficeLayout {
   seats: Record<ZoneId, Seat[]>;
   /** Overflow standing spots per zone. */
   stands: Record<ZoneId, StandSpot[]>;
-  /** Circle obstacles (x, z, r) for the character controller. */
-  obstacles: { x: number; z: number; r: number }[];
+  /** Collision volumes for the character controller (see `Obstacle`). */
+  obstacles: Obstacle[];
   /** Glass conference hall against the back wall. */
   conference: ConferenceRect;
   /** Every enclosed/special area: conference, meeting rooms, cafeteria. */
@@ -71,6 +71,31 @@ export interface OfficeLayout {
   cafeTables: CafeTable[];
   /** Structural columns (realistic shell). */
   columns: { x: number; z: number }[];
+  /** Floor planter positions (the "trees"), shared by the decor and the collider. */
+  planters: { x: number; z: number }[];
+}
+
+/**
+ * A character-collider volume: a circle (`r`) or an axis-aligned box
+ * (`hw`/`hd` half-extents).
+ *
+ * Round things — planters, columns, café tables, chairs — are circles. Desk
+ * pods, meeting tables, lockers and counters are **boxes**, because a circle
+ * around a rectangle is wrong in both directions at once: sized to cover the
+ * long axis it seals the aisle beside the short one, and sized for the short
+ * axis it leaves the ends open. A desk pod is 4.2 × 3.4 m with 0.8 m aisles
+ * between pods — there is no radius that both covers the chairs and leaves
+ * those aisles walkable.
+ */
+export interface Obstacle {
+  x: number;
+  z: number;
+  /** Circle radius. Mutually exclusive with hw/hd. */
+  r?: number;
+  /** Box half-extent on X. */
+  hw?: number;
+  /** Box half-extent on Z. */
+  hd?: number;
 }
 
 export const DOOR_HALF = 0.8;
@@ -197,7 +222,7 @@ function tableSeats(
 }
 
 /** Glass-wall obstacle ring for an enclosed area, leaving the door gap open. */
-function glassObstacles(a: AreaRect, obstacles: { x: number; z: number; r: number }[]) {
+function glassObstacles(a: AreaRect, obstacles: Obstacle[]) {
   const step = 0.6;
   for (let x = -a.w / 2; x <= a.w / 2 + 1e-6; x += step) {
     const wx = a.cx + x;
@@ -221,7 +246,7 @@ export function buildOfficeLayout(room: RoomConfig): OfficeLayout {
   const deskSeats = { A: [], B: [], C: [], D: [] } as Record<ZoneId, Seat[]>;
   const specialSeats = { A: [], B: [], C: [], D: [] } as Record<ZoneId, Seat[]>;
   const stands = { A: [], B: [], C: [], D: [] } as Record<ZoneId, StandSpot[]>;
-  const obstacles: { x: number; z: number; r: number }[] = [];
+  const obstacles: Obstacle[] = [];
   const conference = conferenceRect(room);
   const areas = specialAreas(room, conference);
   const blocked = (x: number, z: number, pad: number) => areas.some((a) => inRect(a, x, z, pad));
@@ -256,7 +281,16 @@ export function buildOfficeLayout(room: RoomConfig): OfficeLayout {
         if (placed === null) continue;
         const z = placed;
         pods.push({ x, z, zone: id });
-        obstacles.push({ x, z, r: 1.5 });
+        // The pod footprint *including* its chairs. As a circle this had to be
+        // r 1.5 to keep the 0.8 m aisles open, which left the chairs (out at
+        // 1.86 m) sticking through the collider.
+        // Slightly inside the nominal footprint: the collider is inflated by the
+        // walker radius, and pods sit on a 5.0 x 4.2 m pitch, so using the full
+        // 2.1 x 1.7 half-extents would shrink the designed 0.8 m aisles to 0.2 m
+        // and make walking between desk runs feel like squeezing through a slot.
+        // 2.0 x 1.6 still covers the desks (2.1) and the chairs (1.85) once
+        // inflated, and leaves 0.4 m of clear aisle either side.
+        obstacles.push({ x, z, hw: POD_HALF_W - 0.1, hd: POD_HALF_D - 0.1 });
         for (const s of SEAT_OFFSETS) {
           deskSeats[id].push({ x: x + s.dx, z: z + s.dz, angle: s.angle, zone: id, kind: 'desk' });
         }
@@ -285,12 +319,12 @@ export function buildOfficeLayout(room: RoomConfig): OfficeLayout {
     if (a.kind === 'conference') {
       const { tw, td } = tableSize(a);
       for (const s of tableSeats(a.cx, a.cz, tw, td, 3, true, 'meeting')) specialSeats[s.zone].push(s);
-      for (const dx of [-1.3, 0, 1.3]) obstacles.push({ x: a.cx + dx, z: a.cz, r: td / 2 + 0.35 });
+      obstacles.push({ x: a.cx, z: a.cz, hw: tw / 2, hd: td / 2 });
       glassObstacles(a, obstacles);
     } else if (a.kind === 'meeting') {
       const { tw, td } = tableSize(a);
       for (const s of tableSeats(a.cx, a.cz, tw, td, 2, false, 'meeting')) specialSeats[s.zone].push(s);
-      for (const dx of [-0.5, 0.5]) obstacles.push({ x: a.cx + dx, z: a.cz, r: td / 2 + 0.35 });
+      obstacles.push({ x: a.cx, z: a.cz, hw: tw / 2, hd: td / 2 });
       glassObstacles(a, obstacles);
     } else {
       // Cafeteria: round tables in a row, 4 lounge chairs each
@@ -320,6 +354,42 @@ export function buildOfficeLayout(room: RoomConfig): OfficeLayout {
     }
   }
 
+  // Chairs around the meeting and café tables. The tables were already
+  // obstacles but their chairs were not, so you could walk straight through the
+  // seating and end up standing inside a meeting. The chair centre sits 0.42 m
+  // behind its seat point, along the sitter's facing (never assume 0/π).
+  for (const id of ZONE_IDS) {
+    for (const s of specialSeats[id]) {
+      obstacles.push({
+        x: s.x - Math.sin(s.angle) * 0.42,
+        z: s.z - Math.cos(s.angle) * 0.42,
+        r: 0.34,
+      });
+    }
+  }
+
+  // Floor planters ("trees"). Derived here rather than in InteriorDecor so the
+  // decor and the character collider cannot drift apart — a planter you can
+  // walk through is one that was only ever a mesh.
+  const WALL_FACE = 0.1; // building walls are 0.18 m boxes centred on the boundary
+  const featureHalf = 3.2; // half-width of the left-wall feature panel (WallTvs)
+  const tvZ = 0.5;
+  const plx = -room.width / 2 + WALL_FACE + 0.47;
+  const cafeArea = areas.find((a) => a.kind === 'cafeteria');
+  const planters: { x: number; z: number }[] = [
+    { x: -1.9, z: room.length / 2 - 0.7 },
+    { x: 1.9, z: room.length / 2 - 0.7 },
+    { x: plx, z: tvZ - featureHalf + 0.3 },
+    { x: plx, z: tvZ + featureHalf - 0.3 },
+  ];
+  if (cafeArea) planters.push({ x: cafeArea.cx - cafeArea.w / 2 - 0.45, z: cafeArea.cz + cafeArea.d / 2 - 0.4 });
+  for (const p of planters) obstacles.push({ x: p.x, z: p.z, r: 0.42 });
+
+  // Storage lockers along the west wall (0.45 x 1.2 m boxes, backs to the wall).
+  for (const lz of [room.length / 4, room.length / 4 + 1.3, -room.length / 4]) {
+    obstacles.push({ x: -room.width / 2 + 0.32, z: lz, hw: 0.225, hd: 0.6 });
+  }
+
   // Structural columns on the zone boundary, between the desk rows (clear of the aisles)
   const columns = [
     { x: -room.width / 4, z: -0.9 },
@@ -334,5 +404,5 @@ export function buildOfficeLayout(room: RoomConfig): OfficeLayout {
     seats[id] = [...deskSeats[id].slice(0, 2), ...specialSeats[id], ...deskSeats[id].slice(2)];
   }
 
-  return { pods, seats, stands, obstacles, conference, areas, cafeTables, columns };
+  return { pods, seats, stands, obstacles, conference, areas, cafeTables, columns, planters };
 }

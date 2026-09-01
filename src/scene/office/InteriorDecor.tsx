@@ -45,6 +45,8 @@ const POSTERS = {
   innovation: { url: '/textures/posters/innovation-wall.webp', aspect: 1400 / 933 },
   nevergiveup: { url: '/textures/posters/nevergiveup.webp', aspect: 736 / 1308 },
   ship: { url: '/textures/posters/ship.webp', aspect: 600 / 1200 },
+  /** User-supplied portrait artwork — the gallery wall's centrepiece. */
+  natpu: { url: '/textures/posters/natpu.webp', aspect: 1400 / 1120 },
 } as const;
 type PosterId = keyof typeof POSTERS;
 
@@ -196,16 +198,37 @@ export function InteriorDecor() {
       if (b - a > 0.6) slatBacks.push({ p: [rx + 0.015, 1.4, (a + b) / 2], ry: 0, s: [1, 1, (b - a) / 1] });
     }
 
-    // Framed posters: spaced along the right wall run, plus one on the left wall
-    // between the feature wall and the entrance. Eye level is 1.65 m.
+    // Framed art along the right wall run, plus more on the left wall between
+    // the feature wall and the entrance. Gallery hang line (frame centres) is
+    // 1.65 m, so pieces of different heights still line up the way a real hang
+    // does.
+    //
+    // The spacing is **width-aware**. Each frame's width comes from its own
+    // artwork aspect, so placing them at fixed fractions of the run — which is
+    // what this did — crowds a wide piece against a narrow one, and overlaps
+    // outright once a large mural joins the row. Instead the widths are summed,
+    // the leftover is split into equal gaps, and the row is laid out end to end;
+    // if it will not fit, nothing is hung rather than letting frames intersect.
     const art: PosterSpec[] = [];
-    const order: PosterId[] = ['imagine', 'nevergiveup', 'failure', 'bharathi'];
     const [ra, rb] = segsR[0];
-    if (rb - ra > 6) {
-      for (let i = 0; i < order.length; i++) {
-        const z = ra + ((rb - ra) * (i + 1)) / (order.length + 1);
-        const id = order[i];
-        art.push({ p: [rx - 0.05, 1.65, z], ry: -Math.PI / 2, id, h: id === 'failure' ? 1.15 : id === 'nevergiveup' ? 1.3 : 0.95 });
+    // `natpu` is the centrepiece and gets about twice the height of the prints
+    // beside it; it sits second so it lands near the middle of the run, which is
+    // the part of this wall the office actually looks at. `bharathi` used to
+    // hang here as well as on the left wall — the same picture twice — so the
+    // mural takes that slot.
+    const hang: { id: PosterId; h: number }[] = [
+      { id: 'imagine', h: 0.95 },
+      { id: 'natpu', h: 1.9 },
+      { id: 'failure', h: 1.15 },
+      { id: 'nevergiveup', h: 1.3 },
+    ];
+    const widths = hang.map((a) => a.h * POSTERS[a.id].aspect);
+    const gap = (rb - ra - widths.reduce((t, w) => t + w, 0)) / (hang.length + 1);
+    if (gap > 0.25) {
+      let z = ra + gap;
+      for (let i = 0; i < hang.length; i++) {
+        art.push({ p: [rx - 0.05, 1.65, z + widths[i] / 2], ry: -Math.PI / 2, id: hang[i].id, h: hang[i].h });
+        z += widths[i] + gap;
       }
     }
     const [la, lb] = segsL[1];
@@ -217,14 +240,10 @@ export function InteriorDecor() {
     // facing the open plan (the cafeteria TV panel keeps the right half)
     art.push({ p: [-W / 4 - 0.4, 1.7, L / 2 - WALL_FACE - 0.05], ry: Math.PI, id: 'innovation', h: 1.7 });
 
-    // Floor planters: flank the entrance, the feature wall and the cafeteria edge
-    const planters: [number, number][] = [
-      [-1.9, L / 2 - 0.7],
-      [1.9, L / 2 - 0.7],
-      [lx + 0.45, tvZ - featureHalf + 0.3],
-      [lx + 0.45, tvZ + featureHalf - 0.3],
-    ];
-    if (cafe) planters.push([cafe.cx - cafe.w / 2 - 0.45, cafe.cz + cafe.d / 2 - 0.4]);
+    // Floor planters: positions come from the layout, not from here. They are
+    // also character-collider obstacles, and a planter whose mesh and collider
+    // are computed in two places is one you will eventually walk through.
+    const planters: [number, number][] = layout.planters.map((p) => [p.x, p.z]);
 
     // Slatted timber ceiling raft over the cafeteria
     const cafeSlats: Part[] = [];

@@ -8,16 +8,17 @@ import { useSimStore } from '../../state/simStore';
 import { useUiStore } from '../../state/uiStore';
 
 const BINDINGS: [string, string][] = [
-  ['W A S D / ↑ ← ↓ →', 'Walk (camera-relative)'],
+  ['W A S D / ↑ ← ↓ →', 'Walk — camera-relative, and you turn to face where you go'],
   ['Click floor', 'Walk to a point'],
   ['Click a glowing chair', 'Walk over and sit down at the laptop'],
   ['F', 'Sit at the nearest free desk / stand up'],
   ['G', 'Dance'],
-  ['J', 'Jump'],
+  ['Space / J', 'Jump'],
+  ['Ctrl + ← / →', 'Turn your whole body on the spot (the view turns with it)'],
   ['Q / Shift', 'Zoom chase camera in / out'],
   ['Mouse drag', 'Orbit around you — front, back, side'],
   ['Esc', 'Back to orbit camera / close panels'],
-  ['Space', 'Pause / resume simulation'],
+  ['P', 'Pause / resume simulation'],
   ['N', 'Toggle employee names (Employee mode)'],
   ['V', 'Data Viz — people view'],
   ['C', 'History charts'],
@@ -32,6 +33,7 @@ const SPEEDS = [0.5, 1, 2, 5, 10];
 
 export function Shortcuts() {
   const [open, setOpen] = useState(false);
+  const fullMode = useUiStore((s) => s.fullMode);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -43,10 +45,21 @@ export function Shortcuts() {
       switch (e.key) {
         case '?': setOpen((o) => !o); break;
         case 'Escape':
+          // Esc unwinds one layer at a time, outermost first. Full mode is
+          // listed here as well as handled by the browser's own fullscreen Esc,
+          // because `requestFullscreen` can be refused — in which case full
+          // mode is on, the browser has nothing to exit, and this is the only
+          // way out.
           if (open) setOpen(false);
           else if (ui.dataVizOpen) ui.toggle('dataVizOpen');
+          else if (ui.fullMode) {
+            ui.setFullMode(false);
+            if (document.fullscreenElement) void document.exitFullscreen?.();
+          }
           break;
-        case ' ': e.preventDefault(); sim.setRunning(!sim.running); break;
+        // Pause moved off Space when Space became jump: the character
+        // controller has first claim on the keys you press while walking around.
+        case 'p': case 'P': sim.setRunning(!sim.running); break;
         case 'n': case 'N': ui.setEmployeeMode(!ui.employeeMode); break;
         case 'v': case 'V': ui.toggle('dataVizOpen'); break;
         case 'c': case 'C': ui.toggle('chartsOpen'); break;
@@ -63,14 +76,19 @@ export function Shortcuts() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="glass pointer-events-auto absolute right-4 bottom-4 z-30 flex h-8 w-8 items-center justify-center rounded-full text-ink-dim hover:text-accent"
-        title="Keyboard shortcuts (?)"
-      >
-        <Keyboard size={14} />
-      </button>
+      {/* The key bindings above stay live in full mode — they are most of how you
+          drive the office once the panels are gone — but the floating help button
+          is a panel like any other, so it goes with them. `?` still opens the sheet. */}
+      {!fullMode && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="glass pointer-events-auto absolute right-4 bottom-4 z-30 flex h-8 w-8 items-center justify-center rounded-full text-ink-dim hover:text-accent"
+          title="Keyboard shortcuts (?)"
+        >
+          <Keyboard size={14} />
+        </button>
+      )}
       {open && (
         <div className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-base/60" onClick={() => setOpen(false)}>
           <div className="glass fade-up w-[28rem] rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>

@@ -10,6 +10,16 @@ import { OFFICE_THEMES } from '../config/officeThemes';
  * Weather-reactive lighting. Realistic mode gets a brighter daylight rig with
  * higher-resolution shadows; stylized keeps the moody neon look. Cloud cover
  * and rain from live Chennai weather dim and cool the key light in both.
+ *
+ * Realistic mode's ambient and hemisphere terms are deliberately *low*. The
+ * PMREM office rig in `RealisticEnvironment` already supplies ambient light,
+ * and it supplies it with direction — bright from the window wall and the LED
+ * grid, dim under the desks. A large flat `ambientLight` on top of that adds
+ * the same energy again with no direction at all, which is what made the room
+ * read as evenly washed plastic: every surface lit identically regardless of
+ * where it faced. Cutting the flat fill and letting the environment map carry
+ * the ambient is what gives the office contrast and depth, and it costs less
+ * per fragment, not more.
  */
 export function Lighting() {
   const room = useSimStore((s) => s.params.room);
@@ -41,15 +51,15 @@ export function Lighting() {
     key.color.lerp(target, k);
 
     // Interior lighting compensates when the sky dims (offices keep their lights on)
-    const ambientTarget = realistic ? 1.5 + cloud * 0.25 : 1.3 + cloud * 0.2;
+    const ambientTarget = realistic ? 0.45 + cloud * 0.15 : 1.3 + cloud * 0.2;
     ambient.intensity += (ambientTarget - ambient.intensity) * k;
   });
 
   return (
     <>
-      <ambientLight ref={ambientRef} intensity={realistic ? 1.5 : 1.3} color={realistic ? '#f4f6fa' : '#b8cdf0'} />
+      <ambientLight ref={ambientRef} intensity={realistic ? 0.45 : 1.3} color={realistic ? '#f4f6fa' : '#b8cdf0'} />
       <hemisphereLight
-        intensity={realistic ? 1.1 : 0.5}
+        intensity={realistic ? 0.45 : 0.5}
         color={realistic ? '#ffffff' : '#dce8ff'}
         groundColor={realistic ? '#9a9ca0' : '#1a2438'}
       />

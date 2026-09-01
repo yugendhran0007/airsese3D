@@ -45,7 +45,7 @@ export function CharacterHUD() {
           RH <span className="font-bold text-ink">{fmt(zone.humidity)}</span>%
         </span>
       </div>
-      <span className="text-[9px] text-ink-faint">↑↓ walk · ←→ side-step · Q zoom in · Shift zoom out · drag to orbit · click floor</span>
+      <span className="text-[9px] text-ink-faint">↑↓ walk · ←→ side-step · Ctrl+←→ turn · Q zoom in · Shift zoom out · drag to orbit · click floor</span>
       <CloseX onClick={() => useUiStore.getState().hideCard('hud')} label="Close HUD" />
     </div>
   );

@@ -10,13 +10,18 @@ import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import {
+  applyFaceLod,
   applyPose,
+  collectFaceParts,
+  faceLodDistance,
   findPoseBones,
   modelForSeed,
   normalizeHeight,
   prepareAvatarSource,
   WorldXRotator,
 } from './realisticPeople';
+import { detailLevel } from '../../utils/autoTune';
+import { useUiStore } from '../../state/uiStore';
 
 const AXIS_Y = new THREE.Vector3(0, 1, 0);
 const AXIS_Z = new THREE.Vector3(0, 0, 1);
@@ -26,7 +31,7 @@ export function Presenter({ position, rotationY, seed = 7 }: { position: [number
   const { scene } = useGLTF(url);
   const groupRef = useRef<THREE.Group>(null);
 
-  const { clone, rArm, rForeArm, head, spine } = useMemo(() => {
+  const { clone, rArm, rForeArm, head, spine, faceParts } = useMemo(() => {
     prepareAvatarSource(scene);
     const c = SkeletonUtils.clone(scene);
     c.traverse((o) => {
@@ -42,11 +47,20 @@ export function Presenter({ position, rotationY, seed = 7 }: { position: [number
       rForeArm: new WorldXRotator(b.rForeArm, AXIS_Z),
       head: new WorldXRotator(b.head, AXIS_Y),
       spine: new WorldXRotator(b.spine),
+      faceParts: collectFaceParts(c),
     };
   }, [scene]);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock, camera }) => {
     const t = clock.elapsedTime;
+    const g = groupRef.current;
+    if (g) {
+      applyFaceLod(
+        faceParts,
+        camera.position.distanceTo(g.position),
+        faceLodDistance(useUiStore.getState().autoTune, detailLevel().faceDist),
+      );
+    }
     // Gesture cycle: point at the screen (~4 s), then open-hand toward the room
     const cycle = (t % 9) / 9;
     const pointing = cycle < 0.45 ? 1 : 0;

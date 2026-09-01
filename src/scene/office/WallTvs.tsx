@@ -14,6 +14,7 @@ import { useSimStore } from '../../state/simStore';
 import { useUiStore } from '../../state/uiStore';
 import { useThree } from '@react-three/fiber';
 import { seededRandom } from '../../utils/math';
+import { FINSTEIN } from '../../config/brand';
 
 const SCREEN_W = 2.2; // m
 /** Building walls are 0.18 m boxes centred on the room boundary; keep the bracket clear of the inner face. */
@@ -23,11 +24,12 @@ const TEX_W = 1024;
 const TEX_H = 576;
 /** Logo loop length (seconds): build in → hold → fade out. */
 const LOOP = 8;
-const NAVY = '#0b1a33';
-const NAVY_2 = '#10264d';
-const BLUE_DARK = '#1f5fa8';
-const BLUE = '#3a8fd6';
-const BLUE_LIGHT = '#7cc4f0';
+// Palette and mark geometry are shared with the boot screen — see config/brand.ts.
+const NAVY = FINSTEIN.navy;
+const NAVY_2 = FINSTEIN.navy2;
+const BLUE_DARK = FINSTEIN.blueDark;
+const BLUE = FINSTEIN.blue;
+const BLUE_LIGHT = FINSTEIN.blueLight;
 
 const clamp01 = (t: number) => Math.min(Math.max(t, 0), 1);
 const easeOut = (t: number) => 1 - Math.pow(1 - clamp01(t), 3);
